@@ -53,7 +53,8 @@ const char *GHOST_SystemPathsWin32::getUserDir(int, const char *versionstr) cons
 
   if (hResult == S_OK) {
     conv_utf_16_to_8(knownpath_16, knownpath, MAX_PATH * 3);
-    strcat(knownpath, "\\Blender Foundation\\Blender\\");
+    /* Ensō Engine keeps its own settings, apart from any regular Blender install. */
+    strcat(knownpath, "\\Mix 3D Design\\Enso Engine\\");
     strcat(knownpath, versionstr);
     user_dir = knownpath;
   }

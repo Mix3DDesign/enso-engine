@@ -48,6 +48,26 @@ const char *BKE_blender_version_string();
 /** As above but does not show patch version. */
 const char *BKE_blender_version_string_compact();
 
+/* -------------------------------------------------------------------- */
+/** \name Ensō Engine (Mix 3D Design)
+ *
+ * Product version of the Ensō Engine build, shown in the UI (splash, window title,
+ * status bar). Blender's own version strings above stay untouched because add-ons,
+ * exporters and file headers rely on them.
+ * \{ */
+
+#define ENSO_ENGINE_NAME "Ensō Engine"
+#define ENSO_ENGINE_VERSION_MAJOR 1
+#define ENSO_ENGINE_VERSION_MINOR 0
+
+/** e.g. "Ensō Engine 1.0 (5.3.0)". */
+const char *BKE_enso_version_string();
+
+/** e.g. "Ensō 1.0 | 5.3.0", for the status bar. */
+const char *BKE_enso_version_string_compact();
+
+/** \} */
+
 /** Returns true when version cycle is alpha, otherwise (beta, rc) returns false. */
 bool BKE_blender_version_is_alpha();
 

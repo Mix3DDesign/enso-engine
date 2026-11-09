@@ -156,6 +156,13 @@ static wmOperatorStatus node_group_edit_exec(bContext *C, wmOperator *op)
 
   bNode *gnode = node_group_get_active(C, node_idname);
 
+  if (gnode && !exit && node_is_enso_locked(*gnode)) {
+    BKE_report(op->reports,
+               RPT_INFO,
+               "Ensō node is locked. Right-click > Unlock Ensō Node to open it as a node group");
+    return OPERATOR_CANCELLED;
+  }
+
   if (gnode && !exit) {
     bNodeTree *ngroup = id_cast<bNodeTree *>(gnode->id);
 
@@ -225,6 +232,9 @@ static wmOperatorStatus node_group_enter_exit_invoke(bContext *C,
   }
   bNodeTree *group = id_cast<bNodeTree *>(node->id);
   if (!group || ID_MISSING(group)) {
+    return OPERATOR_PASS_THROUGH;
+  }
+  if (node_is_enso_locked(*node)) {
     return OPERATOR_PASS_THROUGH;
   }
   ED_node_tree_push(&region, &snode, group, node);

@@ -70,6 +70,17 @@
 #include "gpu_shader_material_diffuse.bsl.hh"                  /* IWYU pragma: export */
 #include "gpu_shader_material_displacement.bsl.hh"             /* IWYU pragma: export */
 #include "gpu_shader_material_emission.bsl.hh"                 /* IWYU pragma: export */
+#include "gpu_shader_material_enso_brush_normals.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_curvature.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_ink_bleed.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_npr.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_sky_lib.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_sky_c12.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_sky_c20.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_sky_c32.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_sky_p12.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_sky_p20.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_sky_p32.bsl.hh" /* IWYU pragma: export */
 #include "gpu_shader_material_euler_to_rotation.bsl.hh"        /* IWYU pragma: export */
 #include "gpu_shader_material_float_to_int.bsl.hh"             /* IWYU pragma: export */
 #include "gpu_shader_material_fractal_noise.bsl.hh"            /* IWYU pragma: export */

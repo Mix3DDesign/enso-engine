@@ -483,6 +483,31 @@ class NODE_MT_compositor_node_creative_base(node_add_menu.NodeMenu):
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 
+class NODE_MT_compositor_node_npr_base(node_add_menu.NodeMenu):
+    """Ensō Engine: NPR menu of the compositor. Native Ensō filters, and the Ensō DLC filters
+    from the "NPR" asset catalogs drawn inside it."""
+    bl_label = "NPR"
+
+    def draw(self, context):
+        del context
+        layout = self.layout
+        self.draw_menu(layout, path="NPR/Filters")
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
+class NODE_MT_compositor_node_npr_filters_base(node_add_menu.NodeMenu):
+    bl_label = "Filters"
+    menu_path = "NPR/Filters"
+
+    def draw(self, context):
+        del context
+        import enso_icons
+        layout = self.layout
+        self.node_operator(layout, "CompositorNodeEnsoOutline", icon_value=enso_icons.get("ink"))
+        layout.separator()
+        self.draw_assets_for_catalog(layout, self.menu_path)
+
+
 class NODE_MT_compositor_node_all_base(node_add_menu.NodeMenu):
     bl_label = ""
     menu_path = "Root"
@@ -510,6 +535,7 @@ class NODE_MT_compositor_node_all_base(node_add_menu.NodeMenu):
         self.draw_menu(layout, "Transform")
         self.draw_menu(layout, "Utilities")
         layout.separator()
+        self.draw_menu(layout, "NPR")
         self.draw_root_assets(layout)
         layout.separator()
         self.draw_menu(layout, "Group")
@@ -539,6 +565,8 @@ add_menus = {
     "NODE_MT_category_compositor_matrix": NODE_MT_compositor_utilities_matrix_base,
     "NODE_MT_category_compositor_bundle": NODE_MT_compositor_utilities_bundle_base,
     "NODE_MT_category_compositor_rotation": NODE_MT_compositor_node_rotation_base,
+    "NODE_MT_category_compositor_npr": NODE_MT_compositor_node_npr_base,
+    "NODE_MT_category_compositor_npr_filters": NODE_MT_compositor_node_npr_filters_base,
     "NODE_MT_compositor_node_add_all": NODE_MT_compositor_node_all_base,
 }
 add_menus = node_add_menu.generate_menus(
@@ -571,6 +599,8 @@ swap_menus = {
     "NODE_MT_compositor_node_matrix_swap": NODE_MT_compositor_utilities_matrix_base,
     "NODE_MT_compositor_node_bundle_swap": NODE_MT_compositor_utilities_bundle_base,
     "NODE_MT_compositor_node_rotation_swap": NODE_MT_compositor_node_rotation_base,
+    "NODE_MT_compositor_node_npr_swap": NODE_MT_compositor_node_npr_base,
+    "NODE_MT_compositor_node_npr_filters_swap": NODE_MT_compositor_node_npr_filters_base,
     "NODE_MT_compositor_node_swap_all": NODE_MT_compositor_node_all_base,
 }
 swap_menus = node_add_menu.generate_menus(

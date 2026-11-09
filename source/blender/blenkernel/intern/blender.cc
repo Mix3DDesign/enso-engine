@@ -149,6 +149,42 @@ const char *BKE_blender_version_string()
   return blender_version_string;
 }
 
+/* Release stage shown after the Ensō version ("" for a final release). */
+#define ENSO_ENGINE_VERSION_STAGE " Beta"
+
+const char *BKE_enso_version_string()
+{
+  static char str[64] = "";
+  if (str[0] == '\0') {
+    SNPRINTF_UTF8(str,
+                  "%s %d.%d%s (%d.%01d.%d)",
+                  ENSO_ENGINE_NAME,
+                  ENSO_ENGINE_VERSION_MAJOR,
+                  ENSO_ENGINE_VERSION_MINOR,
+                  ENSO_ENGINE_VERSION_STAGE,
+                  BLENDER_VERSION / 100,
+                  BLENDER_VERSION % 100,
+                  BLENDER_VERSION_PATCH);
+  }
+  return str;
+}
+
+const char *BKE_enso_version_string_compact()
+{
+  static char str[48] = "";
+  if (str[0] == '\0') {
+    SNPRINTF_UTF8(str,
+                  "Ensō %d.%d%s | %d.%01d.%d",
+                  ENSO_ENGINE_VERSION_MAJOR,
+                  ENSO_ENGINE_VERSION_MINOR,
+                  ENSO_ENGINE_VERSION_STAGE,
+                  BLENDER_VERSION / 100,
+                  BLENDER_VERSION % 100,
+                  BLENDER_VERSION_PATCH);
+  }
+  return str;
+}
+
 const char *BKE_blender_version_string_compact()
 {
   return blender_version_string_compact;

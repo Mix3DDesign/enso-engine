@@ -94,7 +94,38 @@ def paths():
             paths.append(addon_dir)
         elif i == 0:
             print("Internal error:", addon_dir, "was not found!")
+    # Ensō: add-ons that come with installed Ensō DLC packs, so they are listed (not "missing").
+    try:
+        dlc_root = _bpy.utils.user_resource('CONFIG', path="enso_dlc")
+        if os.path.isdir(dlc_root):
+            for entry in sorted(os.listdir(dlc_root)):
+                addon_dir = os.path.join(dlc_root, entry, "addons")
+                if os.path.isdir(addon_dir) and _enso_pack_licensed(os.path.join(dlc_root, entry)):
+                    paths.append(addon_dir)
+    except Exception:
+        pass
     return paths
+
+
+def _enso_pack_licensed(pack_dir):
+    """Ensō: paid packs only provide add-ons while their license is active."""
+    import json
+    import os
+    try:
+        with open(os.path.join(pack_dir, "manifest.json"), encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    except Exception:
+        return False
+    try:
+        import enso_license
+    except Exception:
+        return not manifest.get("license_required") and not str(manifest.get("id", "")).endswith("_member")
+    if not enso_license.needs_license(manifest):
+        return True
+    try:
+        return enso_license.status(manifest["id"], manifest).ok
+    except Exception:
+        return False
 
 
 # A version of `paths` that includes extension repositories returning a list `(path, package)` pairs.

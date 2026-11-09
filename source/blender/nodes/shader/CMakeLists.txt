@@ -47,6 +47,11 @@ set(SRC
   nodes/node_shader_displacement.cc
   nodes/node_shader_eevee_specular.cc
   nodes/node_shader_emission.cc
+  nodes/node_shader_enso_brush_normals.cc
+  nodes/node_shader_enso_curvature.cc
+  nodes/node_shader_enso_npr.cc
+  nodes/node_shader_enso_ink_bleed.cc
+  nodes/node_shader_enso_sky.cc
   nodes/node_shader_fresnel.cc
   nodes/node_shader_gamma.cc
   nodes/node_shader_geometry.cc

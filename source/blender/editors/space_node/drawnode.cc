@@ -274,6 +274,10 @@ NodeResizeDirection node_get_resize_direction(const SpaceNode &snode,
 
 static void node_draw_buttons_group(ui::Layout &layout, bContext *C, PointerRNA *ptr)
 {
+  /* Ensō DLC nodes are presented as single nodes: no node-group data-block selector. */
+  if (node_is_enso_locked(*static_cast<const bNode *>(ptr->data))) {
+    return;
+  }
   template_id_browse(&layout, C, ptr, "node_tree", nullptr, nullptr, nullptr);
 }
 

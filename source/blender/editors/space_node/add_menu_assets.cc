@@ -144,6 +144,8 @@ static Set<StringRef> get_builtin_menus(const int tree_type)
               "Utilities",
               "Utilities/Math",
               "Utilities/Vector",
+              "NPR",         /* Ensō Engine: native NPR menu, DLC catalogs are drawn inside it. */
+              "NPR/Filters", /* Ensō Engine: Ensō Outline plus the DLC filters. */
               "Group",
               "Layout"};
     case NTREE_SHADER:
@@ -154,6 +156,7 @@ static Set<StringRef> get_builtin_menus(const int tree_type)
               "Color",
               "Texture",
               "Utilities",
+              "NPR", /* Ensō Engine: native NPR menu, DLC catalogs are drawn inside it. */
               "Utilities/Math",
               "Utilities/Vector",
               "Group",

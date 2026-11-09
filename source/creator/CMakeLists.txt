@@ -360,6 +360,9 @@ else()
     endif()
     target_compile_definitions(blender-launcher PRIVATE -D_UNICODE -DUNICODE)
     target_link_libraries(blender-launcher Pathcch.lib)
+    # Ensō Engine: the windowed launcher people click is "EnsoEngine.exe".
+    # It starts blender.exe next to it (kept for add-on / tool compatibility).
+    set_target_properties(blender-launcher PROPERTIES OUTPUT_NAME "EnsoEngine")
   endif()
 endif()
 
@@ -1117,7 +1120,7 @@ elseif(WIN32)
     install(
       FILES ${CMAKE_BINARY_DIR}/blender.exe.manifest
       DESTINATION "."
-      RENAME blender-launcher.exe.manifest
+      RENAME EnsoEngine.exe.manifest
     )
   endif()
   windows_install_shared_manifest(

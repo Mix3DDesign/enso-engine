@@ -564,6 +564,14 @@ bNodeSocket *node_find_indicated_socket(SpaceNode &snode,
 float node_link_dim_factor(const View2D &v2d, const bNodeLink &link);
 bool node_link_is_hidden_or_dimmed(const View2D &v2d, const bNodeLink &link);
 
+/* Ensō Engine: nodes that come from an installed Ensō DLC pack. Their node group carries the
+ * custom property "enso_dlc". They draw with the Ensō look and are locked (Tab does not open
+ * them) until the user unlocks them, which sets "enso_unlocked" on the group. */
+bool node_is_enso(const bNode &node);
+bool node_is_enso_locked(const bNode &node);
+bool node_is_enso_native(const bNode &node);
+bool node_has_enso_look(const bNode &node);
+
 void remap_node_pairing(bNodeTree &dst_tree, const Map<const bNode *, bNode *> &node_map);
 
 void NODE_OT_duplicate(wmOperatorType *ot);

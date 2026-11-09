@@ -643,6 +643,17 @@ set(GLSL_SRC
   shaders/material/gpu_shader_material_displacement.bsl.hh
   shaders/material/gpu_shader_material_eevee_specular.bsl.hh
   shaders/material/gpu_shader_material_emission.bsl.hh
+  shaders/material/gpu_shader_material_enso_brush_normals.bsl.hh
+  shaders/material/gpu_shader_material_enso_curvature.bsl.hh
+  shaders/material/gpu_shader_material_enso_ink_bleed.bsl.hh
+  shaders/material/gpu_shader_material_enso_npr.bsl.hh
+  shaders/material/gpu_shader_material_enso_sky_lib.bsl.hh
+  shaders/material/gpu_shader_material_enso_sky_c12.bsl.hh
+  shaders/material/gpu_shader_material_enso_sky_c20.bsl.hh
+  shaders/material/gpu_shader_material_enso_sky_c32.bsl.hh
+  shaders/material/gpu_shader_material_enso_sky_p12.bsl.hh
+  shaders/material/gpu_shader_material_enso_sky_p20.bsl.hh
+  shaders/material/gpu_shader_material_enso_sky_p32.bsl.hh
   shaders/material/gpu_shader_material_euler_to_rotation.bsl.hh
   shaders/material/gpu_shader_material_float_to_int.bsl.hh
   shaders/material/gpu_shader_material_fractal_noise.bsl.hh

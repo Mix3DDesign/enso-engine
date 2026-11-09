@@ -488,6 +488,31 @@ void raycast_eval([[resource_table]] KernelGlobals & /*kg*/,
 {
 }
 
+/* Ensō Ink Bleed Node: read the ray-cast pre-pass (normal, distance, object) at a pixel. */
+
+void enso_prepass_fetch([[resource_table]] KernelGlobals & /*kg*/,
+                        float2 /*px*/,
+                        bool &valid,
+                        float3 &N,
+                        float &dist,
+                        uint &id)
+{
+  valid = false;
+  N = float3(0.0f, 0.0f, 1.0f);
+  dist = 0.0f;
+  id = 0u;
+}
+
+void enso_prepass_size([[resource_table]] KernelGlobals & /*kg*/, float2 &size)
+{
+  size = float2(1.0f);
+}
+
+void enso_pixel_jitter([[resource_table]] KernelGlobals & /*kg*/, float2 /*px*/, float &jitter)
+{
+  jitter = 0.5f;
+}
+
 /* Image Texture Node. */
 
 float texture_lod_bias_get([[resource_table]] KernelGlobals & /*kg*/)

@@ -20,6 +20,7 @@
 #include "vk_backend.hh"
 #include "vk_graphics_pipeline.hh"
 #include "vk_pipeline_pool.hh"
+#include "vk_shader_module.hh"
 
 namespace blender {
 
@@ -149,6 +150,9 @@ static VkPipeline create_graphics_pipeline_no_libs(const VKGraphicsInfo &graphic
   VKDevice &device = VKBackend::get().device;
   VKGraphicsPipelineCreateInfoBuilder builder;
   builder.build_full(device, graphics_info, vk_pipeline_base);
+  if (vk_enso_is_heavy_module(graphics_info.shaders.vk_fragment_module)) {
+    builder.vk_graphics_pipeline_create_info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+  }
 
   /* Build pipeline. */
   VkPipeline pipeline = VK_NULL_HANDLE;
@@ -195,7 +199,9 @@ static VkPipeline create_graphics_pipeline_libs(const VKGraphicsInfo &graphics_i
   VkGraphicsPipelineCreateInfo linking_pipeline_create_info = {
       VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       &vk_pipeline_library_create_info,
-      VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT,
+      VkPipelineCreateFlags(vk_enso_is_heavy_module(graphics_info.shaders.vk_fragment_module) ?
+                                VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT :
+                                VK_PIPELINE_CREATE_LINK_TIME_OPTIMIZATION_BIT_EXT),
       0,
       nullptr,
       nullptr,
@@ -545,6 +551,9 @@ VkPipeline VKPipelineMap<VKGraphicsInfo::Shaders>::create(
   const VKWorkarounds &workarounds = device.workarounds_get();
   VKGraphicsPipelineCreateInfoBuilder builder;
   builder.build_shaders_lib(shaders_info, extensions, workarounds, vk_pipeline_base);
+  if (vk_enso_is_heavy_module(shaders_info.vk_fragment_module)) {
+    builder.vk_graphics_pipeline_create_info.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+  }
 
   /* Build pipeline. */
   VkPipeline pipeline = VK_NULL_HANDLE;

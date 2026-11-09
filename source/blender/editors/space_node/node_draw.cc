@@ -1703,6 +1703,58 @@ static void node_toggle_button_cb(bContext *C, void *node_argv, void *op_argv)
   WM_operator_name_call(C, opname, wm::OpCallContext::InvokeDefault, nullptr, nullptr);
 }
 
+bool node_is_enso(const bNode &node)
+{
+  if (!node.is_group() || node.id == nullptr || node.id->properties == nullptr) {
+    return false;
+  }
+  return IDP_GetPropertyFromGroup(node.id->properties, "enso_dlc") != nullptr;
+}
+
+bool node_is_enso_native(const bNode &node)
+{
+  /* Native Ensō nodes (ShaderNodeEnso..., CompositorNodeEnso..., GeometryNodeEnso...). */
+  return StringRef(node.idname).find("Enso") != StringRef::not_found;
+}
+
+bool node_has_enso_look(const bNode &node)
+{
+  return node_is_enso(node) || node_is_enso_native(node);
+}
+
+bool node_is_enso_locked(const bNode &node)
+{
+  if (!node_is_enso(node)) {
+    return false;
+  }
+  return IDP_GetPropertyFromGroup(node.id->properties, "enso_unlocked") == nullptr;
+}
+
+/* Ensō Engine colours: header gradient gold -> crimson, warm orange glow. */
+/* The widget shader blends inner1 -> inner2 from right to left, so "right" is listed first. */
+static constexpr float ENSO_HEADER_RIGHT[4] = {0.839f, 0.188f, 0.243f, 1.0f};
+static constexpr float ENSO_HEADER_LEFT[4] = {0.957f, 0.769f, 0.251f, 1.0f};
+static constexpr float ENSO_GLOW[3] = {1.0f, 0.55f, 0.24f};
+
+/* Soft glow: many thin filled layers that grow outward. Each layer only adds a little
+ * alpha, so together they build one smooth falloff instead of visible rings. */
+static void node_draw_enso_glow(const bNode &node, const float radius, const float alpha)
+{
+  const rctf &rct = node.runtime->draw_bounds;
+  const bool selected = node.is_selected();
+  const int steps = 24;
+  const float reach = (selected ? 16.0f : 12.0f) * UI_SCALE_FAC;
+  const float strength = selected ? 0.07f : 0.05f;
+  ui::draw_roundbox_corner_set(ui::CNR_ALL);
+  for (int i = steps; i >= 1; i--) {
+    const float t = float(i) / float(steps);
+    const float grow = reach * t;
+    const float color[4] = {ENSO_GLOW[0], ENSO_GLOW[1], ENSO_GLOW[2], strength * (1.0f - t) * alpha};
+    const rctf rect = {rct.xmin - grow, rct.xmax + grow, rct.ymin - grow, rct.ymax + grow};
+    ui::draw_roundbox_4fv(&rect, true, radius + grow, color);
+  }
+}
+
 static void node_draw_shadow(const SpaceNode &snode,
                              const bNode &node,
                              const float radius,
@@ -2896,8 +2948,12 @@ static void node_draw_basis(const bContext &C,
   }
 
   /* Shadow. */
+  const bool is_enso = node_has_enso_look(node);
   if (!bke::all_zone_node_types().contains(node.type_legacy)) {
     node_draw_shadow(snode, node, BASIS_RAD, 1.0f);
+  }
+  if (is_enso) {
+    node_draw_enso_glow(node, BASIS_RAD, 1.0f);
   }
 
   const rctf &rct = node.runtime->draw_bounds;
@@ -2955,7 +3011,14 @@ static void node_draw_basis(const bContext &C,
     const ColorTheme4f color_header = node_header_color_get(ntree, node, color_id);
 
     ui::draw_roundbox_corner_set(ui::CNR_TOP_LEFT | ui::CNR_TOP_RIGHT);
-    ui::draw_roundbox_4fv(&rect, true, corner_radius, color_header);
+    if (is_enso && !node.is_muted()) {
+      const float no_outline[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+      ui::draw_roundbox_4fv_ex(
+          &rect, ENSO_HEADER_RIGHT, ENSO_HEADER_LEFT, 0.0f, no_outline, 0.0f, corner_radius);
+    }
+    else {
+      ui::draw_roundbox_4fv(&rect, true, corner_radius, color_header);
+    }
   }
 
   /* Show/hide icons. */
@@ -3194,8 +3257,8 @@ static void node_draw_basis(const bContext &C,
         rct.ymax - NODE_DY + padding,
     };
 
-    /* Node Group indicator. */
-    if (draw_node_details(snode)) {
+    /* Node Group indicator (Ensō nodes are presented as single nodes, so they skip it). */
+    if (draw_node_details(snode) && !is_enso) {
       node_draw_node_group_indicator(snode, node, rect, corner_radius, color);
     }
 
@@ -3216,7 +3279,15 @@ static void node_draw_basis(const bContext &C,
         rct.ymax + outline_width,
     };
     float color_outline[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-    if (node.is_selected()) {
+    if (is_enso && node.is_selected()) {
+      /* Selected Ensō node: bright gold, active one almost white-gold. */
+      const bool active = node.flag & NODE_ACTIVE;
+      color_outline[0] = 1.0f;
+      color_outline[1] = active ? 0.93f : 0.78f;
+      color_outline[2] = active ? 0.62f : 0.35f;
+      color_outline[3] = 1.0f;
+    }
+    else if (node.is_selected()) {
       ui::theme::get_color_4fv((node.flag & NODE_ACTIVE) ? TH_ACTIVE : TH_SELECT, color_outline);
     }
     else if (node_undefined_or_unsupported(ntree, node)) {
@@ -3226,6 +3297,12 @@ static void node_draw_basis(const bContext &C,
     else if (const bke::bNodeZoneType *zone_type = bke::zone_type_by_node_type(node.type_legacy)) {
       ui::theme::get_color_4fv(zone_type->theme_id, color_outline);
       color_outline[3] = 1.0f;
+    }
+    else if (is_enso) {
+      color_outline[0] = ENSO_GLOW[0];
+      color_outline[1] = ENSO_GLOW[1];
+      color_outline[2] = ENSO_GLOW[2];
+      color_outline[3] = 0.9f;
     }
     else {
       ui::theme::get_color_4fv(TH_NODE_OUTLINE, color_outline);

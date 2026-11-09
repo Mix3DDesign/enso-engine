@@ -543,6 +543,46 @@ class NODE_MT_shader_node_utilities_base(node_add_menu.NodeMenu):
         self.draw_assets_for_catalog(layout, self.bl_label)
 
 
+class NODE_MT_shader_node_npr_base(node_add_menu.NodeMenu):
+    """Ensō Engine: NPR menu. Holds the native per-light lighting nodes (the official
+    successors of the NPR prototype's For Each Light) and, below them, any Ensō DLC
+    nodes installed in the "NPR" asset catalogs."""
+    bl_label = "NPR"
+    bl_translation_context = i18n_contexts.id_nodetree
+
+    def draw(self, context):
+        import enso_icons
+        ic = enso_icons.get
+        layout = self.layout
+        eevee = object_eevee_shader_nodes_poll(context)
+        layout.label(text="Lighting (EEVEE)", icon_value=ic("light"))
+        if eevee:
+            for style, text, icon in (('CEL', "For Each Light", "cel"),
+                                      ('CEL_SPEC', "For Each Light: Cel + Highlight", "light"),
+                                      ('CEL_RIM', "For Each Light: Cel + Rim", "cel"),
+                                      ('SOFT', "For Each Light: Soft Bands", "light"),
+                                      ('TINTED', "For Each Light: Tinted Shadows", "shadow"),
+                                      ('HALFTONE', "For Each Light: Halftone", "shadow")):
+                layout.operator("node.enso_add_for_each_light", text=text,
+                                icon_value=ic(icon)).style = style
+        self.node_operator(layout, "ShaderNodeLightAccumulation", poll=eevee)
+        self.node_operator(layout, "ShaderNodeLightInfo", poll=eevee)
+        self.node_operator(layout, "ShaderNodeLightEvaluation", poll=eevee)
+        self.node_operator(layout, "ShaderNodeShadowRaycast", poll=eevee)
+        self.node_operator(layout, "ShaderNodeRaycast", poll=object_material_shader_nodes_poll(context))
+        self.node_operator(layout, "ShaderNodeShaderToRGB", poll=eevee)
+        layout.separator()
+        layout.label(text="Ink & Paint (EEVEE)", icon_value=ic("ink"))
+        self.node_operator(layout, "ShaderNodeEnsoInkBleed", poll=eevee, icon_value=ic("leak"))
+        self.node_operator(layout, "ShaderNodeEnsoCurvature", poll=eevee, icon_value=ic("enso"))
+        self.node_operator(layout, "ShaderNodeEnsoBrushNormals", poll=eevee, icon_value=ic("brush"))
+        self.node_operator(layout, "ShaderNodeEnsoLineDetect", poll=eevee, icon_value=ic("ink"))
+        self.node_operator(layout, "ShaderNodeEnsoScreenRim", poll=eevee, icon_value=ic("light"))
+        self.node_operator(layout, "ShaderNodeEnsoHatching", poll=eevee, icon_value=ic("shadow"))
+        layout.separator()
+        self.draw_assets_for_catalog(layout, self.bl_label)
+
+
 class NODE_MT_shader_node_all_base(node_add_menu.NodeMenu):
     bl_label = ""
     menu_path = "Root"
@@ -565,6 +605,7 @@ class NODE_MT_shader_node_all_base(node_add_menu.NodeMenu):
         self.draw_menu(layout, "Texture")
         self.draw_menu(layout, "Utilities")
         layout.separator()
+        self.draw_menu(layout, "NPR")
         self.draw_root_assets(layout)
         layout.separator()
         self.draw_menu(layout, "Group")
@@ -584,6 +625,7 @@ add_menus = {
     "NODE_MT_category_shader_math": NODE_MT_shader_node_math_base,
     "NODE_MT_category_shader_text": NODE_MT_shader_node_text_base,
     "NODE_MT_category_shader_utilities": NODE_MT_shader_node_utilities_base,
+    "NODE_MT_category_shader_npr": NODE_MT_shader_node_npr_base,
     "NODE_MT_shader_node_add_all": NODE_MT_shader_node_all_base,
 }
 add_menus = node_add_menu.generate_menus(
@@ -606,6 +648,7 @@ swap_menus = {
     "NODE_MT_shader_node_math_swap": NODE_MT_shader_node_math_base,
     "NODE_MT_shader_node_text_swap": NODE_MT_shader_node_text_base,
     "NODE_MT_shader_node_utilities_swap": NODE_MT_shader_node_utilities_base,
+    "NODE_MT_shader_node_npr_swap": NODE_MT_shader_node_npr_base,
     "NODE_MT_shader_node_swap_all": NODE_MT_shader_node_all_base,
 }
 swap_menus = node_add_menu.generate_menus(

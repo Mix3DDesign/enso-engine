@@ -31,6 +31,13 @@ class VKShader;
  * phase completely or skip shader module at all when the cache is already aware of this shader by
  * using VK_EXT_shader_module_identifier.
  */
+/**
+ * Ensō: very large generated shaders (native Anime Sky). Their pipelines are built without
+ * SPIR-V optimization and without driver optimization: the driver needs minutes to optimize them
+ * but only seconds otherwise, and the sky is a single cheap full screen pass.
+ */
+bool vk_enso_is_heavy_module(VkShaderModule module);
+
 class VKShaderModule {
  public:
   /**
@@ -56,6 +63,9 @@ class VKShaderModule {
    * Vulkan handler of the shader module.
    */
   VkShaderModule vk_shader_module = VK_NULL_HANDLE;
+
+  /** Ensō: module holds the native Anime Sky shader (see #vk_enso_is_heavy_module). */
+  bool enso_heavy = false;
 
   /**
    * Compilation result when compiling the shader module.

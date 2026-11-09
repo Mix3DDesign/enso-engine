@@ -76,6 +76,22 @@ def set_vector_math_node_defaults(enum_identifier, props):
         set_socket_default_value(props.settings, "Vector_002", "(0.0, 0.0, 0.0)")
 
 
+def _enso_pack_groups(blend_data):
+    """Node groups that belong to Ensō DLC packs, including the groups nested inside them."""
+    hidden = set()
+    stack = [g for g in blend_data.node_groups if g.get("enso_dlc")]
+    while stack:
+        g = stack.pop()
+        if g in hidden:
+            continue
+        hidden.add(g)
+        for node in g.nodes:
+            sub = getattr(node, "node_tree", None)
+            if sub is not None and sub not in hidden:
+                stack.append(sub)
+    return hidden
+
+
 class NodeMenu(Menu):
     """A base-class defining the shared methods for AddNodeMenu and SwapNodeMenu."""
     draw_assets: bool
@@ -93,7 +109,8 @@ class NodeMenu(Menu):
         return context.space_data.type == 'NODE_EDITOR'
 
     @classmethod
-    def node_operator(cls, layout, node_type, *, label=None, poll=None, search_weight=0.0, translate=True):
+    def node_operator(cls, layout, node_type, *, label=None, poll=None, search_weight=0.0, translate=True,
+                      icon_value=0):
         """The main operator defined for the node menu.
         \n(e.g. 'Add Node' for AddNodeMenu, or 'Swap Node' for SwapNodeMenu)."""
 
@@ -110,6 +127,7 @@ class NodeMenu(Menu):
                 text_ctxt=translation_context,
                 translate=translate,
                 search_weight=search_weight,
+                icon_value=icon_value,
             )
             props.type = node_type
 
@@ -304,11 +322,16 @@ class NodeMenu(Menu):
 
             local_groups = []
             has_non_local_groups = False
+            # Ensō: nodes that come from DLC packs (and the groups they use inside) are added from
+            # their own menus, they are not listed as editable groups.
+            enso_hidden = _enso_pack_groups(context.blend_data)
 
             for group in context.blend_data.node_groups:
                 if group.bl_idname != node_tree.bl_idname:
                     continue
                 if group.contains_tree(node_tree):
+                    continue
+                if group in enso_hidden:
                     continue
                 if not show_hidden:
                     if group.name.startswith('.'):

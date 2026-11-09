@@ -10954,6 +10954,13 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("ShaderNode", "ShaderNodeDisplacement", def_sh_displacement);
   define("ShaderNode", "ShaderNodeEeveeSpecular");
   define("ShaderNode", "ShaderNodeEmission");
+  define("ShaderNode", "ShaderNodeEnsoAnimeSky");
+  define("ShaderNode", "ShaderNodeEnsoInkBleed");
+  define("ShaderNode", "ShaderNodeEnsoCurvature");
+  define("ShaderNode", "ShaderNodeEnsoBrushNormals", def_geo_image);
+  define("ShaderNode", "ShaderNodeEnsoScreenRim");
+  define("ShaderNode", "ShaderNodeEnsoLineDetect");
+  define("ShaderNode", "ShaderNodeEnsoHatching");
   define("ShaderNode", "ShaderNodeFloatCurve", def_float_curve);
   define("ShaderNode", "ShaderNodeFresnel");
   define("ShaderNode", "ShaderNodeGamma");
@@ -11109,6 +11116,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("CompositorNode", "CompositorNodeStabilize", def_cmp_stabilize2d);
   define("CompositorNode", "CompositorNodeSequencerStripInfo");
   define("CompositorNode", "CompositorNodeStringToImage");
+  define("CompositorNode", "CompositorNodeEnsoOutline");
   define("CompositorNode", "CompositorNodeSwitch");
   define("CompositorNode", "CompositorNodeSwitchView");
   define("CompositorNode", "CompositorNodeTime", def_time);

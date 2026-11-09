@@ -100,6 +100,12 @@ static PyStructSequence_Field app_info_fields[] = {
      "The Blender version formatted as a string\n"
      "\n"
      ":type: str\n"},
+    {"enso_version_string",
+     "The Ensō Engine product version formatted as a string, e.g. \"Ensō Engine 1.0 (5.3.0)\". "
+     "Only present in Ensō Engine builds, so add-ons can use "
+     "``hasattr(bpy.app, \"enso_version_string\")`` to detect it\n"
+     "\n"
+     ":type: str\n"},
     {"version_cycle",
      "The release status of this build alpha/beta/rc/release\n"
      "\n"
@@ -224,6 +230,7 @@ static PyObject *make_app_info()
   SetObjItem(PyC_Tuple_Pack_I32(
       {BLENDER_FILE_VERSION / 100, BLENDER_FILE_VERSION % 100, BLENDER_FILE_SUBVERSION}));
   SetStrItem(BKE_blender_version_string());
+  SetStrItem(BKE_enso_version_string());
 
   SetStrItem(STRINGIFY(BLENDER_VERSION_CYCLE));
   SetObjItem(PyBool_FromLong(G.background));

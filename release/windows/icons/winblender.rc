@@ -24,11 +24,11 @@ BEGIN
     BEGIN
       VALUE "FileVersion", BLEN_VER_RC_STR
       VALUE "ProductVersion", BLEN_VER_RC_STR
-      VALUE "CompanyName", "Blender Foundation"
-      VALUE "FileDescription", "Blender"
-      VALUE "LegalCopyright", "GPLv3 (Blender Foundation)"
+      VALUE "CompanyName", "Mix 3D Design"
+      VALUE "FileDescription", "Enso Engine"
+      VALUE "LegalCopyright", "GPLv3 (Blender Foundation, Mix 3D Design)"
       VALUE "OriginalFilename", "blender.exe"
-      VALUE "ProductName", "Blender"
+      VALUE "ProductName", "Enso Engine"
     END
   END
   BLOCK "VarFileInfo"

@@ -3643,7 +3643,10 @@ class WM_MT_splash_about(Menu):
 
         col = split.column(align=True)
         col.scale_y = 0.8
-        col.label(text=iface_("Version: {:s}").format(bpy.app.version_string), translate=False)
+        enso_version = getattr(bpy.app, "enso_version_string", "")
+        if enso_version:
+            col.label(text=iface_("Version: {:s}").format(enso_version), translate=False)
+        col.label(text=iface_("Based on Blender {:s}").format(bpy.app.version_string), translate=False)
         col.separator(factor=2.5)
         col.label(text=iface_("Date: {:s} {:s}").format(
             bpy.app.build_commit_date.decode("utf-8", "replace"),
@@ -3662,18 +3665,18 @@ class WM_MT_splash_about(Menu):
         del _ghost_backend, ghost_backend
 
         col.separator(factor=2.0)
-        col.label(text="Blender is free software")
-        col.label(text="Licensed under the GNU General Public License")
+        col.label(text="Ensō Engine by Mix 3D Design, based on Blender")
+        col.label(text="Free software under the GNU General Public License")
+        col.label(text="Blender is a trademark of the Blender Foundation")
 
         col = split.column(align=True)
         col.emboss = 'PULLDOWN_MENU'
-        col.operator("wm.url_open_preset", text="Donate", icon='FUND').type = 'FUND'
-        col.operator("wm.url_open_preset", text="What's New", icon='URL').type = 'RELEASE_NOTES'
+        col.operator("wm.url_open", text="Mix 3D Design", icon='URL').url = "https://mix3ddesign.com"
+        col.operator("wm.url_open", text="YouTube", icon='URL').url = "https://www.youtube.com/@Mix3Design"
         col.separator(factor=2.0)
-        col.operator("wm.url_open_preset", text="Credits", icon='URL').type = 'CREDITS'
-        col.operator("wm.url_open", text="License", icon='URL').url = "https://www.blender.org/about/license/"
-        col.operator("wm.url_open", text="Blender Store", icon='URL').url = "https://store.blender.org"
-        col.operator("wm.url_open_preset", text="Blender Website", icon='URL').type = 'BLENDER'
+        col.operator("wm.url_open", text="License (GPL)", icon='URL').url = "https://www.blender.org/about/license/"
+        col.operator("wm.url_open_preset", text="Blender Credits", icon='URL').type = 'CREDITS'
+        col.operator("wm.url_open_preset", text="Support Blender", icon='FUND').type = 'FUND'
 
 
 class WM_MT_region_toggle_pie(Menu):

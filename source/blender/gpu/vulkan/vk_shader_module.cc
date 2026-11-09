@@ -11,6 +11,9 @@
 #include "vk_shader.hh"
 
 #include <iomanip>
+#include <mutex>
+
+#include "BLI_set.hh"
 #include <sstream>
 
 namespace blender::gpu {
@@ -21,6 +24,22 @@ VKShaderModule::~VKShaderModule()
     discard_pool.discard_shader_module(vk_shader_module);
     vk_shader_module = VK_NULL_HANDLE;
   }
+}
+
+static std::mutex enso_heavy_mutex;
+static Set<VkShaderModule> &enso_heavy_modules()
+{
+  static Set<VkShaderModule> modules;
+  return modules;
+}
+
+bool vk_enso_is_heavy_module(VkShaderModule module)
+{
+  if (module == VK_NULL_HANDLE) {
+    return false;
+  }
+  std::scoped_lock lock(enso_heavy_mutex);
+  return enso_heavy_modules().contains(module);
 }
 
 void VKShaderModule::finalize(StringRefNull name)
@@ -48,6 +67,10 @@ void VKShaderModule::finalize(StringRefNull name)
   device.functions.vkCreateShaderModule(
       device.vk_handle(), &create_info, nullptr, &vk_shader_module);
   debug::object_label(vk_shader_module, name.c_str());
+  if (enso_heavy && vk_shader_module != VK_NULL_HANDLE) {
+    std::scoped_lock lock(enso_heavy_mutex);
+    enso_heavy_modules().add(vk_shader_module);
+  }
 }
 
 void VKShaderModule::build_sources_hash(StringRef extra)

@@ -557,6 +557,53 @@ float ambient_occlusion_eval(const KernelGlobals &kg,
   return 1.0f;
 }
 
+/* Ensō Ink Bleed: the ray-cast pre-pass holds every visible surface's normal, depth and object
+ * id, which is all a screen-space edge detector needs. */
+void enso_prepass_fetch(
+    KernelGlobals &kg, float2 px, bool &valid, float3 &N, float &dist, uint &id)
+{
+  valid = false;
+  N = float3(0.0f, 0.0f, 1.0f);
+  dist = 0.0f;
+  id = 0u;
+  if (kg.pipe.use_raycast) [[static_branch]] {
+    if (!kg.uniforms.pipeline_buf.can_raycast) {
+      return;
+    }
+    const eevee::Raycast &raycast = kg.raycast;
+    const ViewMatrices view = kg.view.get(0);
+    int2 size = textureSize(raycast.raycast_depth_tx, 0);
+    int2 texel = clamp(int2(floor(px)), int2(0), size - 1);
+    float depth = texelFetch(raycast.raycast_depth_tx, texel, 0).r;
+    N = texelFetch(raycast.prepass_normal_tx, texel, 0).xyz * 2.0f - 1.0f;
+    id = texelFetch(raycast.object_id_tx, texel, 0).x;
+    /* Some GPU backends hand the pre-pass depth over reversed (1 - depth). Read normally, a
+     * reversed value always lands within twice the near clip distance, which a visible surface
+     * practically never is, so that tells the two apart for every pixel. */
+    float near_z = abs(view.depth_screen_to_view(0.0f));
+    bool reversed = abs(view.depth_screen_to_view(depth)) < near_z * 2.0f;
+    float d = reversed ? 1.0f - depth : depth;
+    dist = (d >= 1.0f) ? 1e10f : abs(view.depth_screen_to_view(d));
+    valid = true;
+  }
+}
+
+/* Per pixel, per sample noise in [0, 1): sample patterns that change every frame, so the
+ * viewport and render accumulation smooth them out. */
+void enso_pixel_jitter(KernelGlobals &kg, float2 px, float &jitter)
+{
+  float noise_offset = kg.sampling.rng_1D_get(SAMPLING_RAYTRACE_W);
+  jitter = random::interleaved_gradient(px, 1.0f, noise_offset);
+}
+
+void enso_prepass_size(KernelGlobals &kg, float2 &size)
+{
+  size = float2(1.0f);
+  if (kg.pipe.use_raycast) [[static_branch]] {
+    size = float2(textureSize(kg.raycast.raycast_depth_tx, 0));
+  }
+}
+
 void raycast_eval(KernelGlobals &kg,
                   const ShadingData &sd,
                   float3 position,

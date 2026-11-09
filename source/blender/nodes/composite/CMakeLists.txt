@@ -87,6 +87,7 @@ set(SRC
   nodes/node_composite_normal.cc
   nodes/node_composite_normalize.cc
   nodes/node_composite_pixelate.cc
+  nodes/node_composite_enso_outline.cc
   nodes/node_composite_plane_track_deform.cc
   nodes/node_composite_posterize.cc
   nodes/node_composite_relative_to_pixel.cc

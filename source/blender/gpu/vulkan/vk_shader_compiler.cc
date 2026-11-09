@@ -354,6 +354,10 @@ static bool compile_ex(shaderc::Compiler &compiler,
    * also invalidates older caches that stored the SPIR-V without the injected OpString. */
   const std::string hash_extra = std::string("op_string:") + full_name;
 
+  /* Ensō: see #vk_enso_is_heavy_module. */
+  shader_module.enso_heavy = shader_module.combined_sources.find("node_enso_sky_") !=
+                            std::string::npos;
+
   if (read_spirv_from_disk(shader_module, hash_extra)) {
     return true;
   }
@@ -368,6 +372,9 @@ static bool compile_ex(shaderc::Compiler &compiler,
     options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_1);
   }
   if (G.debug & G_DEBUG_GPU_RENDERDOC) {
+    do_optimize = false;
+  }
+  if (shader_module.enso_heavy) {
     do_optimize = false;
   }
   /* WORKAROUND: Qualcomm driver can crash when handling optimized SPIR-V. */

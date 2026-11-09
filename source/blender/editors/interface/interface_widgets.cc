@@ -5607,6 +5607,10 @@ static WidgetType *widget_type(WidgetStyle type)
 
     /* specials */
     case WidgetStyle::Icon:
+      /* Ensō: frameless icons (add-on checkboxes, expand arrows) sit on the panel, not on a
+       * button, so they take the panel's text color like labels do. Themes with dark text on
+       * light buttons would otherwise draw them dark on a dark panel. */
+      wt.state = widget_state_label;
       wt.custom = widget_icon_has_anim;
       break;
 

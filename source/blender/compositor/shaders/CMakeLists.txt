@@ -95,6 +95,7 @@ set(SRC_GLSL_COMP
   compositor_pad.glsl
   compositor_parallel_reduction.glsl
   compositor_pixelate.glsl
+  compositor_enso_outline.glsl
   compositor_plane_deform_anisotropic.glsl
   compositor_plane_deform_mask.glsl
   compositor_plane_deform_motion_blur_mask.glsl

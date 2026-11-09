@@ -1062,6 +1062,69 @@ static bool gpu_stack_link_v(GPUMaterial *material,
   return true;
 }
 
+bool GPU_stack_link_list(GPUMaterial *material,
+                         const bNode *bnode,
+                         const char *name,
+                         GPUNodeStack *in,
+                         GPUNodeStack *out,
+                         GPUNodeLink *const *extra_in,
+                         int extra_in_num)
+{
+  GPUNodeGraph *graph = gpu_material_node_graph(material);
+  GPUFunction *function = gpu_material_library_get_function(name);
+  if (!function) {
+    fprintf(stderr, "GPU failed to find function %s\n", name);
+    return false;
+  }
+  GPUNode *node = gpu_node_create(name);
+  int totin = 0;
+  int totout = 0;
+  if (in) {
+    for (int i = 0; !in[i].end; i++) {
+      if (in[i].type != GPU_NONE) {
+        gpu_node_input_socket(material, bnode, node, &in[i], i);
+        totin++;
+      }
+    }
+  }
+  if (out) {
+    for (int i = 0; !out[i].end; i++) {
+      if (out[i].type != GPU_NONE) {
+        gpu_node_output(node, out[i].type, &out[i].link);
+        totout++;
+      }
+    }
+  }
+  int extra = 0;
+  for (int i = 0; i < function->totparam; i++) {
+    if (function->paramqual[i] == FUNCTION_QUAL_OUT) {
+      if (totout == 0) {
+        fprintf(stderr, "GPU function %s has more outputs than the node\n", name);
+        return false;
+      }
+      totout--;
+    }
+    else if (totin == 0) {
+      if (extra >= extra_in_num) {
+        fprintf(stderr, "GPU function %s has more inputs than given\n", name);
+        return false;
+      }
+      GPUNodeLink *link = extra_in[extra++];
+      if (link->socket) {
+        gpu_node_input_socket(nullptr, nullptr, node, link->socket, -1);
+      }
+      else {
+        gpu_node_input_link(node, link, function->paramtype[i]);
+      }
+    }
+    else {
+      totin--;
+    }
+  }
+  BLI_addtail(&graph->nodes, node);
+  return true;
+}
+
 bool GPU_stack_link(GPUMaterial *material,
                     const bNode *bnode,
                     const char *name,

@@ -49,6 +49,13 @@ void register_shader_nodes()
   register_node_type_sh_displacement();
   register_node_type_sh_eevee_specular();
   register_node_type_sh_emission();
+  register_node_type_sh_enso_anime_sky();
+  register_node_type_sh_enso_ink_bleed();
+  register_node_type_sh_enso_curvature();
+  register_node_type_sh_enso_brush_normals();
+  register_node_type_sh_enso_screen_rim();
+  register_node_type_sh_enso_line_detect();
+  register_node_type_sh_enso_hatching();
   register_node_type_sh_fresnel();
   register_node_type_sh_gamma();
   register_node_type_sh_geometry();

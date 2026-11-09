@@ -242,6 +242,7 @@ set(GLSL_SRC
   shaders/infos/compositor_pad_infos.hh
   shaders/infos/compositor_parallel_reduction_infos.hh
   shaders/infos/compositor_pixelate_infos.hh
+  shaders/infos/compositor_enso_outline_infos.hh
   shaders/infos/compositor_plane_deform_infos.hh
   shaders/infos/compositor_premultiply_alpha_infos.hh
   shaders/infos/compositor_realize_on_domain_infos.hh
@@ -341,6 +342,7 @@ set(GLSL_SRC
   shaders/compositor_pad.glsl
   shaders/compositor_parallel_reduction.glsl
   shaders/compositor_pixelate.glsl
+  shaders/compositor_enso_outline.glsl
   shaders/compositor_plane_deform_anisotropic.glsl
   shaders/compositor_plane_deform_mask.glsl
   shaders/compositor_plane_deform_motion_blur.glsl

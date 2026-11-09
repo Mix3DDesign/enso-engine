@@ -20,6 +20,9 @@ _modules = [
     "console",
     "constraint",
     "copy_global_transform",
+    "enso_dlc",
+    "enso_theme",
+    "enso_workspaces",
     "file",
     "geometry_nodes",
     "grease_pencil",
@@ -63,6 +66,9 @@ def register():
     from . import (
         bone_selection_sets,
         copy_global_transform,
+        enso_dlc,
+        enso_theme,
+        enso_workspaces,
     )
 
     for mod in _modules_loaded:
@@ -71,6 +77,9 @@ def register():
 
     bone_selection_sets.register()
     copy_global_transform.register()
+    enso_dlc.register()
+    enso_theme.register()
+    enso_workspaces.register()
 
 
 def unregister():
@@ -78,10 +87,16 @@ def unregister():
     from . import (
         bone_selection_sets,
         copy_global_transform,
+        enso_dlc,
+        enso_theme,
+        enso_workspaces,
     )
 
     bone_selection_sets.unregister()
     copy_global_transform.unregister()
+    enso_dlc.unregister()
+    enso_theme.unregister()
+    enso_workspaces.unregister()
 
     for mod in reversed(_modules_loaded):
         for cls in reversed(mod.classes):

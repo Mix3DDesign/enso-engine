@@ -678,6 +678,18 @@ bool GPU_stack_link(GPUMaterial *mat,
                     GPUNodeStack *out,
                     ...);
 
+/**
+ * Ensō: #GPU_stack_link with the extra input links given as a list instead of varargs, for nodes
+ * whose function takes a variable number of extra inputs (no extra outputs).
+ */
+bool GPU_stack_link_list(GPUMaterial *mat,
+                         const bNode *node,
+                         const char *name,
+                         GPUNodeStack *in,
+                         GPUNodeStack *out,
+                         GPUNodeLink *const *extra_in,
+                         int extra_in_num);
+
 bool GPU_stack_link_zone(GPUMaterial *material,
                          const bNode *bnode,
                          const char *name,
