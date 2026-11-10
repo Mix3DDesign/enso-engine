@@ -188,6 +188,26 @@ def _reload_pack_addon(name, addons_dir):
         del sys.modules[key]
 
 
+def _drop_stale_pack_addon(name):
+    """The add-on is running from a pack folder that is gone (the pack was replaced by another
+    edition, or removed): stop it, so it can load again from where it lives now. Left running,
+    it would look for its own files in the folder that no longer exists."""
+    import sys
+    import addon_utils
+    mod = sys.modules.get(name)
+    if mod is None:
+        return
+    path = getattr(mod, "__file__", "") or ""
+    if not path or os.path.isfile(path):
+        return
+    try:
+        addon_utils.disable(name, default_set=False)
+    except Exception as ex:
+        print("Ensō DLC: could not disable", name, ex)
+    for key in [k for k in list(sys.modules) if k == name or k.startswith(name + ".")]:
+        del sys.modules[key]
+
+
 def enable_pack_addons(reload=False):
     """Packs can ship runtime add-ons (e.g. the Ensō NPR panel and its live light tracking).
     They are enabled from the pack folder unless the same add-on is already installed by the
@@ -213,6 +233,11 @@ def enable_pack_addons(reload=False):
         addons_dir = os.path.join(pack_dir, "addons")
         if addons_dir in sys.path:
             sys.path.remove(addons_dir)
+    # Folders of packs that were removed must not stay on the module path.
+    root = os.path.normcase(dlc_root())
+    for entry in list(sys.path):
+        if os.path.normcase(entry).startswith(root) and not os.path.isdir(entry):
+            sys.path.remove(entry)
     for pack_dir, manifest in active:
         names = manifest.get("addons") or []
         if not names:
@@ -222,6 +247,8 @@ def enable_pack_addons(reload=False):
             continue
         _add_pack_path(addons_dir)
         names = [n for n in names if n not in builtin]
+        for name in names:
+            _drop_stale_pack_addon(name)
         if reload:
             for name in names:
                 _reload_pack_addon(name, addons_dir)
