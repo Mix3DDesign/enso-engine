@@ -263,6 +263,7 @@ void enso_curvature_core([[resource_table]] KernelGlobals &kg,
                          const ShadingData &sd,
                          float radius,
                          float depth_threshold,
+                         float blur,
                          float &curvature,
                          float &contact)
 {
@@ -303,21 +304,36 @@ void enso_curvature_core([[resource_table]] KernelGlobals &kg,
   /* Taps are taken in opposite pairs and only counted when both sides are on this surface.
    * At a silhouette one side is missing, and counting the other alone would read the outline
    * of every round shape as an edge. */
-  const int pairs = 4;
+  /* Four rings of six directions: enough taps that a wide radius stays smooth instead of
+   * breaking into blotches. */
+  const int pairs = 6;
   float sum = 0.0f;
   float weight = 0.0f;
-  for (int ring = 0; ring < 3; ring++) {
-    float f = (ring == 0) ? 1.0f : ((ring == 1) ? 0.66f : 0.33f);
-    float rr = r_px * f;
+  /* Blur: the same measure is taken around four more points next to the pixel and averaged.
+   * The normals of a mesh change in steps from face to face, and one measure at the pixel
+   * shows those steps as dots or lines when the radius is close to the size of a face. */
+  bool blurred = blur > 0.001f;
+  int centers = blurred ? 5 : 1;
+  int rings = blurred ? 2 : 4;
+  float spread = r_px * saturate(blur) * 0.7f;
+  for (int center = 0; center < centers; center++) {
+    float2 pc = px;
+    if (center > 0) {
+      float ca = (float(center) + jit * 0.5f) * 1.5707963f;
+      pc += float2(cos(ca), sin(ca)) * spread;
+    }
+  for (int ring = 0; ring < rings; ring++) {
+    float f = 1.0f - (blurred ? 0.5f : 0.25f) * float(ring);
+    float rr = max(r_px * f, 1.0f);
     for (int i = 0; i < pairs; i++) {
-      float a = (float(i) + 0.37f * float(ring) + jit) * (3.14159265f / float(pairs));
+      float a = (float(i) + 0.29f * float(ring) + jit) * (3.14159265f / float(pairs));
       float2 dir = float2(cos(a), sin(a));
       float3 D = vx * dir.x + vy * dir.y;
       bool ok = true;
       float pair_sum = 0.0f;
       for (int side = 0; side < 2; side++) {
         float sgn = (side == 0) ? 1.0f : -1.0f;
-        float2 q = px + dir * (rr * sgn);
+        float2 q = pc + dir * (rr * sgn);
         if (any(lessThan(q, float2(0.0f))) || any(greaterThanEqual(q, size))) {
           ok = false;
           continue;
@@ -352,6 +368,7 @@ void enso_curvature_core([[resource_table]] KernelGlobals &kg,
       }
     }
   }
+  }
   curvature = (weight > 0.0f) ? (sum / weight) * r_m : 0.0f;
 #endif
 }
@@ -360,7 +377,10 @@ void enso_curvature_core([[resource_table]] KernelGlobals &kg,
  * dropped by the threshold, the rest is scaled by the contrast. */
 float enso_curvature_shape(float value, float threshold, float contrast)
 {
-  return saturate((value - max(threshold, 0.0f)) * max(contrast, 0.0f));
+  /* A soft shoulder instead of a hard clip: strong curvature still reaches white, but the way
+   * there is a gradient, so a wide radius gives form shading and not two flat tones. */
+  float x = max(value - max(threshold, 0.0f), 0.0f) * max(contrast, 0.0f);
+  return 1.0f - exp(-1.6f * x);
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -370,6 +390,7 @@ void node_enso_screen_curvature(float radius,
                                 float strength,
                                 float threshold,
                                 float depth_threshold,
+                                float blur,
                                 [[resource_table]] KernelGlobals &kg,
                                 const ShadingData &sd,
                                 float &convex,
@@ -378,8 +399,128 @@ void node_enso_screen_curvature(float radius,
 {
   float c;
   float contact;
-  enso_curvature_core(kg, sd, radius, depth_threshold, c, contact);
+  enso_curvature_core(kg, sd, radius, depth_threshold, blur, c, contact);
   convex = enso_curvature_shape(c, threshold, strength);
   concave = enso_curvature_shape(-c, threshold, strength);
   signed_curvature = convex - concave;
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Ensō Reflection */
+
+/* What the surface would reflect, found on screen: the view ray is mirrored on the surface and
+ * followed through the scene's depth. It gives a mask of the reflected shapes and a flat colour
+ * per reflected object, to paint fake reflections on floors and water. */
+[[node]]
+void node_enso_reflection(float3 N,
+                          float distance,
+                          float thickness,
+                          float fade,
+                          float reflect_self,
+                          float stretch,
+                          [[resource_table]] KernelGlobals &kg,
+                          ShadingData &sd,
+                          float &mask,
+                          float4 &color,
+                          float &hit_distance)
+{
+  mask = 0.0f;
+  color = float4(0.0f, 0.0f, 0.0f, 1.0f);
+  hit_distance = 1.0f;
+#if defined(GPU_FRAGMENT_SHADER) || defined(GLSL_CPP_STUBS)
+  float2 size;
+  enso_prepass_size(kg, size);
+  float2 px = sd.frag_co.xy;
+  bool v0;
+  float3 N0;
+  float d0;
+  uint id0;
+  enso_prepass_fetch(kg, px, v0, N0, d0, id0);
+  if (!v0 || d0 > 1e9f || size.x <= 1.0f) {
+    return;
+  }
+  const ViewMatrices view = kg.view_matrices_get(sd);
+  float zv = enso_npr_view_z(view, sd.P);
+  if (zv < 1e-6f) {
+    return;
+  }
+  float unit = d0 / zv;
+  float3 V = coordinate_impl(kg, sd, sd.P, sd.N).incoming;
+  float3 Nn = normalize(N);
+  /* Stretch: a real reflection shrinks under the object as the camera rises. Lowering the
+   * camera only for the reflection keeps it long and readable from any angle. */
+  float up = dot(V, Nn);
+  V = normalize(V - Nn * (up * 0.92f * saturate(stretch)));
+  float3 R = reflect(-V, Nn);
+  float jit;
+  enso_pixel_jitter(kg, px, jit);
+  float reach = max(distance, 1e-3f);
+  const int steps = 64;
+  for (int i = 0; i < steps; i++) {
+    float t = (float(i) + 0.5f + jit) / float(steps);
+    /* Short steps near the surface, longer ones far away. */
+    float s = t * (0.25f + 0.75f * t);
+    float3 W = sd.P + Nn * 0.003f + R * (s * reach);
+    bool ok;
+    float2 q = enso_npr_world_to_px(view, W, size, ok);
+    if (!ok || any(lessThan(q, float2(0.0f))) || any(greaterThanEqual(q, size))) {
+      break;
+    }
+    bool vq;
+    float3 Nq;
+    float dq;
+    uint idq;
+    enso_prepass_fetch(kg, q, vq, Nq, dq, idq);
+    if (!vq || dq > 1e9f) {
+      continue;
+    }
+    if (idq == id0 && reflect_self < 0.5f) {
+      continue;
+    }
+    float behind = enso_npr_view_z(view, W) - dq / unit;
+    float step_len = reach * (0.25f + 1.5f * t) / float(steps);
+    if (behind > 0.0f && behind < max(thickness, 1e-3f) + step_len) {
+      float border = min(min(q.x, size.x - q.x), min(q.y, size.y - q.y)) / (size.x * 0.06f);
+      float far_fade = 1.0f - smoothstep(1.0f - saturate(fade), 1.0f, s);
+      mask = saturate(border) * far_fade;
+      hit_distance = s;
+      enso_object_color(kg, idq, color);
+      color.a = 1.0f;
+      break;
+    }
+  }
+#endif
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Ensō Blur */
+
+/* Blur for anything that is looked up by coordinates. Each render sample moves the coordinates
+ * to another point of a small disc, and the samples add up to a real blur of whatever texture,
+ * colour, value or vector is read with them. */
+[[node]]
+void node_enso_blur(float3 co,
+                    float radius,
+                    [[resource_table]] KernelGlobals &kg,
+                    const ShadingData &sd,
+                    float3 &out_co)
+{
+  out_co = co;
+#if defined(GPU_FRAGMENT_SHADER) || defined(GLSL_CPP_STUBS)
+  float jit;
+  enso_pixel_jitter(kg, sd.frag_co.xy, jit);
+  float a = jit * 6.2831853f;
+  float r = sqrt(fract(jit * 7.31f + 0.137f)) * max(radius, 0.0f);
+  /* Spread in the plane of the coordinates that changes across the surface. */
+  float3 dx = gpu_dfdx(co);
+  float3 dy = gpu_dfdy(co);
+  float lx = length(dx);
+  float ly = length(dy);
+  float3 ax = (lx > 1e-8f) ? dx / lx : float3(1.0f, 0.0f, 0.0f);
+  float3 ay = (ly > 1e-8f) ? dy / ly : float3(0.0f, 1.0f, 0.0f);
+  ay = ay - ax * dot(ay, ax);
+  float la = length(ay);
+  ay = (la > 1e-6f) ? ay / la : float3(0.0f, 1.0f, 0.0f);
+  out_co = co + (ax * cos(a) + ay * sin(a)) * r;
+#endif
 }

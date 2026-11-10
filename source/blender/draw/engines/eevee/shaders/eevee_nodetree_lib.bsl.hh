@@ -596,6 +596,13 @@ void enso_pixel_jitter(KernelGlobals &kg, float2 px, float &jitter)
   jitter = random::interleaved_gradient(px, 1.0f, noise_offset);
 }
 
+/* The Object Color (Object properties > Viewport Display) of the object with this pre-pass id. */
+void enso_object_color(KernelGlobals &kg, uint id, float4 &color)
+{
+  ObjectInfos object_infos = kg.infos.get(id);
+  color = object_infos.ob_color;
+}
+
 void enso_prepass_size(KernelGlobals &kg, float2 &size)
 {
   size = float2(1.0f);

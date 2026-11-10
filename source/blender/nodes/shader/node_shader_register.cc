@@ -64,11 +64,14 @@ void register_shader_nodes()
   register_node_type_sh_enso_light_select();
   register_node_type_sh_enso_mask();
   register_node_type_sh_enso_part_tags();
+  register_node_type_sh_enso_hair_highlight();
   register_node_type_sh_enso_shade_info();
   register_node_type_sh_enso_highlight();
   register_node_type_sh_enso_light_rim();
   register_node_type_sh_enso_eye_parallax();
   register_node_type_sh_enso_screen_curvature();
+  register_node_type_sh_enso_reflection();
+  register_node_type_sh_enso_blur();
   register_node_type_sh_fresnel();
   register_node_type_sh_gamma();
   register_node_type_sh_geometry();

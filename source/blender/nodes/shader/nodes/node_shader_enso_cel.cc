@@ -32,7 +32,8 @@ static void node_declare(NodeDeclarationBuilder &b)
   b.add_input<decl::Float>("Value"_ustr)
       .default_value(0.5f)
       .hide_value()
-      .description("Lighting to band, for example the Factor of a Light Evaluation node");
+      .description("Lighting to band, for example the Factor of a Light Evaluation node. Left "
+                   "unconnected, the node lights the surface itself from Light Direction");
   b.add_input<decl::Float>("Bands"_ustr)
       .default_value(1.0f)
       .min(1.0f)
@@ -61,6 +62,12 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description(
           "Width of the smoothed edge in screen pixels. The edge stays this crisp at any zoom, "
           "with no stair steps");
+  b.add_input<decl::Vector>("Light Direction"_ustr)
+      .default_value({-0.4f, -0.5f, 0.75f})
+      .description("Used when Value is not connected: the direction toward the light, for "
+                   "example the Direction of an Ensō Light Select node. This shading has no "
+                   "cast shadows, so it never flickers");
+  b.add_input<decl::Vector>("Normal"_ustr).hide_value();
   b.add_output<decl::Float>("Shade"_ustr).description("0 in full shadow, 1 in full light");
   b.add_output<decl::Float>("Edge"_ustr)
       .description("1 on the thin line where light meets shadow, for bleed and edge tint");
@@ -72,6 +79,17 @@ static int node_gpu(GPUMaterial *mat,
                     GPUNodeStack *in,
                     GPUNodeStack *out)
 {
+  if (!in[7].link) {
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[7].link);
+  }
+  if (!in[0].link) {
+    /* Nothing to band: light the surface from Light Direction. */
+    GPU_link(mat,
+             "node_enso_cel_own_light",
+             in[7].link,
+             in[6].link ? in[6].link : GPU_uniform(in[6]),
+             &in[0].link);
+  }
   const bool ok = GPU_stack_link(mat, node, "node_enso_cel_bands", in, out);
   if (ok) {
     enso_pass_write(mat, "Enso Cel", out[0].link);
@@ -759,6 +777,108 @@ void register_node_type_sh_enso_light_rim()
   ntype.declare = file_ns::node_declare;
   ntype.gpu_fn = file_ns::node_gpu;
   ntype.default_width = 170.0f;
+  bke::node_register_type(ntype);
+}
+
+/* -------------------------------------------------------------------- Ensō Hair Highlight */
+namespace nodes::node_shader_enso_hair_highlight_cc {
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Vector>("UV"_ustr)
+      .hide_value()
+      .description("UVs of the hair, laid out so the strands run along V (root to tip). "
+                   "Unconnected, the active UV map is used");
+  b.add_input<decl::Float>("Highlight Map"_ustr)
+      .default_value(1.0f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("Painted map of where the highlight may appear (an HM map). White everywhere "
+                   "when unconnected");
+  b.add_input<decl::Float>("Position"_ustr)
+      .default_value(0.55f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("Where along the strands the highlight sits");
+  b.add_input<decl::Float>("Width"_ustr).default_value(0.12f).min(0.0f).max(1.0f).subtype(
+      PROP_FACTOR);
+  b.add_input<decl::Float>("View Shift"_ustr)
+      .default_value(0.25f)
+      .min(-1.0f)
+      .max(1.0f)
+      .description("How far the highlight slides along the hair as the camera goes up and down");
+  b.add_input<decl::Float>("Light Shift"_ustr)
+      .default_value(0.15f)
+      .min(-1.0f)
+      .max(1.0f)
+      .description("How far the highlight slides as the light goes up and down");
+  b.add_input<decl::Vector>("Light Direction"_ustr)
+      .default_value({0.0f, -0.5f, 0.85f})
+      .description("Direction toward the light, for example from Ensō Light Select");
+  b.add_input<decl::Float>("Teeth"_ustr)
+      .default_value(24.0f)
+      .min(0.0f)
+      .max(400.0f)
+      .description("Number of teeth across the hair (along U). 0 gives a plain band");
+  b.add_input<decl::Float>("Teeth Size"_ustr)
+      .default_value(0.7f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("How deep the teeth cut into the band");
+  b.add_input<decl::Float>("Along U"_ustr)
+      .default_value(0.0f)
+      .min(0.0f)
+      .max(1.0f)
+      .description("Set to 1 when the strands run along U instead of V in the UV map");
+  b.add_input<decl::Float>("Softness"_ustr).default_value(0.0f).min(0.0f).max(1.0f).subtype(
+      PROP_FACTOR);
+  b.add_input<decl::Float>("Edge Pixels"_ustr)
+      .default_value(1.5f)
+      .min(0.0f)
+      .max(16.0f)
+      .description("Width of the smoothed edge in screen pixels");
+  b.add_output<decl::Float>("Highlight"_ustr).description("The highlight, inside the map");
+  b.add_output<decl::Float>("Band"_ustr).description("The highlight before the map");
+}
+
+static int node_gpu(GPUMaterial *mat,
+                    bNode *node,
+                    bNodeExecData * /*execdata*/,
+                    GPUNodeStack *in,
+                    GPUNodeStack *out)
+{
+  if (!in[0].link) {
+    GPU_link(mat,
+             "node_enso_attribute_uv",
+             GPU_attribute(mat, CD_AUTO_FROM_NAME, ""),
+             &in[0].link);
+  }
+  const bool ok = GPU_stack_link(
+      mat, node, "node_enso_hair_highlight", in, out, GPU_kernel_globals(), GPU_shading_data());
+  if (ok) {
+    enso_pass_write(mat, "Enso Hair Ring", out[0].link);
+  }
+  return ok;
+}
+
+}  // namespace nodes::node_shader_enso_hair_highlight_cc
+
+void register_node_type_sh_enso_hair_highlight()
+{
+  namespace file_ns = nodes::node_shader_enso_hair_highlight_cc;
+  static bke::bNodeType ntype;
+  sh_node_type_base(&ntype, "ShaderNodeEnsoHairHighlight"_ustr);
+  ntype.ui_name = "Ensō Hair Highlight";
+  ntype.ui_description =
+      "Anime hair highlight that follows the hair's UVs: a toothed band along the strands that "
+      "slides with the camera and the light, limited by a painted highlight map (EEVEE)";
+  ntype.nclass = NODE_CLASS_INPUT;
+  ntype.declare = file_ns::node_declare;
+  ntype.gpu_fn = file_ns::node_gpu;
+  ntype.default_width = 180.0f;
   bke::node_register_type(ntype);
 }
 

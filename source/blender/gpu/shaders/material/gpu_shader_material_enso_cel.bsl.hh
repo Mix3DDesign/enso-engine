@@ -36,6 +36,14 @@ float enso_cel_step(float threshold, float value, float softness, float edge_px)
   return smoothstep(threshold - w, threshold + w, value);
 }
 
+/* Lighting for Cel Bands when nothing is plugged into Value: plain facing toward the light. */
+[[node]]
+void node_enso_cel_own_light(float3 normal, float3 light_dir, float &value)
+{
+  float3 L = enso_cel_normalize(light_dir, float3(0.0f, 0.0f, 1.0f));
+  value = saturate(dot(normalize(normal), L));
+}
+
 [[node]]
 void node_enso_cel_bands(float value,
                          float bands,
@@ -43,6 +51,8 @@ void node_enso_cel_bands(float value,
                          float spread,
                          float softness,
                          float edge_px,
+                         float3 /*light_dir*/,
+                         float3 /*normal*/,
                          float &shade,
                          float &edge)
 {
@@ -412,6 +422,49 @@ void node_enso_light_select(float4x4 light_matrix,
   else {
     direction = enso_cel_normalize(to_light, float3(0.0f, 0.0f, 1.0f));
   }
+}
+
+/* The active UV map as a plain vector. */
+[[node]]
+void node_enso_attribute_uv(float4 uv_attr, float3 &uv)
+{
+  uv = uv_attr.xyz;
+}
+
+/* Ensō Hair Highlight: the anime hair highlight drawn along the hair's own UVs. The band sits
+ * at a height along the strands (V), slides with the view and the light, and its edge is cut
+ * into teeth across the strands (U). A highlight map limits where it may appear. */
+[[node]]
+void node_enso_hair_highlight(float3 uv,
+                              float map,
+                              float position,
+                              float width,
+                              float view_shift,
+                              float light_shift,
+                              float3 light_dir,
+                              float teeth,
+                              float teeth_size,
+                              float along_u,
+                              float softness,
+                              float edge_px,
+                              [[resource_table]] KernelGlobals &kg,
+                              ShadingData &sd,
+                              float &highlight,
+                              float &band)
+{
+  float v = (along_u > 0.5f) ? uv.x : uv.y;
+  float u = (along_u > 0.5f) ? uv.y : uv.x;
+  float3 V = coordinate_impl(kg, sd, sd.P, sd.N).incoming;
+  float3 L = enso_cel_normalize(light_dir, float3(0.0f, 0.0f, 1.0f));
+  /* Looking from above or lighting from above moves the band down the hair, like a real
+   * reflection would. */
+  float center = position - view_shift * 0.5f * V.z - light_shift * 0.5f * L.z;
+  float tri = abs(fract(u * max(teeth, 0.0f)) - 0.5f) * 2.0f;
+  float half_width = max(width, 0.0f) * 0.5f *
+                     (1.0f - saturate(teeth_size) * (1.0f - tri) * ((teeth > 0.0f) ? 1.0f : 0.0f));
+  float inside = half_width - abs(v - center);
+  band = enso_cel_step(0.0f, inside, softness * max(width, 1e-4f), edge_px);
+  highlight = band * saturate(map);
 }
 
 /* Ensō passes: running value of each pass for the pixel being shaded. A node inside the light

@@ -225,6 +225,13 @@ static void node_declare(NodeDeclarationBuilder &b)
       .max(100.0f)
       .subtype(PROP_DISTANCE)
       .description("Bigger depth steps than this are treated as another surface and ignored");
+  b.add_input<decl::Float>("Blur"_ustr)
+      .default_value(0.6f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("Smooths the result. It removes the dots and lines that the faces of the mesh "
+                   "leave when the radius is close to their size");
   b.add_output<decl::Float>("Convex"_ustr)
       .description("Outer edges and corners: wear, highlights");
   b.add_output<decl::Float>("Concave"_ustr)
@@ -262,6 +269,135 @@ void register_node_type_sh_enso_screen_curvature()
   ntype.declare = file_ns::node_declare;
   ntype.gpu_fn = file_ns::node_gpu;
   ntype.default_width = 170.0f;
+  bke::node_register_type(ntype);
+}
+
+/* -------------------------------------------------------------------- Ensō Reflection */
+namespace nodes::node_shader_enso_reflection_cc {
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Vector>("Normal"_ustr).hide_value();
+  b.add_input<decl::Float>("Distance"_ustr)
+      .default_value(5.0f)
+      .min(0.0f)
+      .max(1000.0f)
+      .subtype(PROP_DISTANCE)
+      .description("How far away something can be and still be reflected");
+  b.add_input<decl::Float>("Thickness"_ustr)
+      .default_value(0.5f)
+      .min(0.0f)
+      .max(100.0f)
+      .subtype(PROP_DISTANCE)
+      .description("How thick objects are taken to be. Raise it when reflections have holes");
+  b.add_input<decl::Float>("Fade"_ustr)
+      .default_value(0.3f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("Fades the reflection toward the far end of Distance");
+  b.add_input<decl::Float>("Reflect Self"_ustr)
+      .default_value(0.0f)
+      .min(0.0f)
+      .max(1.0f)
+      .description("1 lets the object reflect itself too");
+  b.add_input<decl::Float>("Stretch"_ustr)
+      .default_value(0.6f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("0 is a true mirror, which hides under the object when seen from above. "
+                   "Higher keeps the reflection long and visible from any camera angle");
+  b.add_output<decl::Float>("Mask"_ustr)
+      .description("1 where something is reflected: the shape of the reflection");
+  b.add_output<decl::Color>("Color"_ustr)
+      .description("The Object Color of what is reflected (Object properties > Viewport "
+                   "Display > Color): give each object the colour its reflection should have");
+  b.add_output<decl::Float>("Distance"_ustr)
+      .description("How far the reflected thing is, 0 near to 1 at the end of Distance");
+}
+
+static int node_gpu(GPUMaterial *mat,
+                    bNode *node,
+                    bNodeExecData * /*execdata*/,
+                    GPUNodeStack *in,
+                    GPUNodeStack *out)
+{
+  if (!in[0].link) {
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[0].link);
+  }
+  GPU_material_flag_set(mat, GPU_MATFLAG_RAYCAST);
+  const bool ok = GPU_stack_link(
+      mat, node, "node_enso_reflection", in, out, GPU_kernel_globals(), GPU_shading_data());
+  if (ok) {
+    enso_pass_write(mat, "Enso Reflection", out[0].link);
+  }
+  return ok;
+}
+
+}  // namespace nodes::node_shader_enso_reflection_cc
+
+void register_node_type_sh_enso_reflection()
+{
+  namespace file_ns = nodes::node_shader_enso_reflection_cc;
+  static bke::bNodeType ntype;
+  sh_node_type_base(&ntype, "ShaderNodeEnsoReflection"_ustr);
+  ntype.ui_name = "Ensō Reflection";
+  ntype.ui_description =
+      "What the surface would reflect, as a mask and a flat colour per object: paint fake "
+      "reflections on floors, water and glass (EEVEE)";
+  ntype.nclass = NODE_CLASS_INPUT;
+  ntype.declare = file_ns::node_declare;
+  ntype.gpu_fn = file_ns::node_gpu;
+  ntype.default_width = 170.0f;
+  bke::node_register_type(ntype);
+}
+
+/* -------------------------------------------------------------------- Ensō Blur */
+namespace nodes::node_shader_enso_blur_cc {
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Vector>("Vector"_ustr)
+      .hide_value()
+      .description("The coordinates to blur with. Unconnected, the active UV map is used");
+  b.add_input<decl::Float>("Radius"_ustr)
+      .default_value(0.02f)
+      .min(0.0f)
+      .max(10.0f)
+      .description("Blur size, in the units of the coordinates (0.02 is 2% of a UV tile)");
+  b.add_output<decl::Vector>("Vector"_ustr)
+      .description("Plug this into the Vector input of any texture or mapping to blur it");
+}
+
+static int node_gpu(GPUMaterial *mat,
+                    bNode *node,
+                    bNodeExecData * /*execdata*/,
+                    GPUNodeStack *in,
+                    GPUNodeStack *out)
+{
+  if (!in[0].link) {
+    GPU_link(mat, "node_enso_attribute_uv", GPU_attribute(mat, CD_AUTO_FROM_NAME, ""), &in[0].link);
+  }
+  return GPU_stack_link(
+      mat, node, "node_enso_blur", in, out, GPU_kernel_globals(), GPU_shading_data());
+}
+
+}  // namespace nodes::node_shader_enso_blur_cc
+
+void register_node_type_sh_enso_blur()
+{
+  namespace file_ns = nodes::node_shader_enso_blur_cc;
+  static bke::bNodeType ntype;
+  sh_node_type_base(&ntype, "ShaderNodeEnsoBlur"_ustr);
+  ntype.ui_name = "Ensō Blur";
+  ntype.ui_description =
+      "Blurs any texture, colour, value or vector that is read with coordinates: plug its Vector "
+      "into the texture. The blur builds up over the render samples (EEVEE)";
+  ntype.nclass = NODE_CLASS_OP_VECTOR;
+  ntype.declare = file_ns::node_declare;
+  ntype.gpu_fn = file_ns::node_gpu;
+  ntype.default_width = 150.0f;
   bke::node_register_type(ntype);
 }
 

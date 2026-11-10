@@ -45,6 +45,7 @@ inline const char *const enso_pass_names[] = {
     "Enso Eye",
     "Enso Skin",
     "Enso Cloth",
+    "Enso Reflection",
 };
 
 /**

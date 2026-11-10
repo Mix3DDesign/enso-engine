@@ -38,7 +38,7 @@ void node_enso_curvature(float radius,
 {
   float c;
   float touch;
-  enso_curvature_core(kg, sd, radius, 0.1f, c, touch);
+  enso_curvature_core(kg, sd, radius, 0.1f, 0.6f, c, touch);
   /* Contrast 1 shows a right-angle edge at full strength. */
   float gain = max(contrast, 0.0f) * 4.0f;
   convex = enso_curvature_shape(c, 0.04f, gain);

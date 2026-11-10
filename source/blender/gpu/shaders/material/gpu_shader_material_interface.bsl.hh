@@ -513,6 +513,11 @@ void enso_pixel_jitter([[resource_table]] KernelGlobals & /*kg*/, float2 /*px*/,
   jitter = 0.5f;
 }
 
+void enso_object_color([[resource_table]] KernelGlobals & /*kg*/, uint /*id*/, float4 &color)
+{
+  color = float4(1.0f);
+}
+
 /* Image Texture Node. */
 
 float texture_lod_bias_get([[resource_table]] KernelGlobals & /*kg*/)

@@ -10983,11 +10983,14 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("ShaderNode", "ShaderNodeEnsoLightSelect", def_sh_enso_light_select);
   define("ShaderNode", "ShaderNodeEnsoMask");
   define("ShaderNode", "ShaderNodeEnsoPartTags");
+  define("ShaderNode", "ShaderNodeEnsoHairHighlight");
   define("ShaderNode", "ShaderNodeEnsoShadeInfo");
   define("ShaderNode", "ShaderNodeEnsoHighlight");
   define("ShaderNode", "ShaderNodeEnsoLightRim");
   define("ShaderNode", "ShaderNodeEnsoEyeParallax");
   define("ShaderNode", "ShaderNodeEnsoScreenCurvature");
+  define("ShaderNode", "ShaderNodeEnsoReflection");
+  define("ShaderNode", "ShaderNodeEnsoBlur");
   define("ShaderNode", "ShaderNodeFloatCurve", def_float_curve);
   define("ShaderNode", "ShaderNodeFresnel");
   define("ShaderNode", "ShaderNodeGamma");

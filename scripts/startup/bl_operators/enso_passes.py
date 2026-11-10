@@ -35,6 +35,7 @@ PASSES = (
     ("Enso Eye", "Part Tags", "Mask of the eyes"),
     ("Enso Skin", "Part Tags", "Mask of the skin"),
     ("Enso Cloth", "Part Tags", "Mask of the clothes"),
+    ("Enso Reflection", "Reflection", "The shapes a surface reflects"),
 )
 
 COLOR_PASSES = {"Enso Flat Color"}
