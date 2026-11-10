@@ -1297,6 +1297,39 @@ void node_shadow_raycast_impl(KernelGlobals &kg,
   }
 }
 
+/* Ensō Light Select: how much of one chosen light reaches the point, read from that light's own
+ * shadow maps, so it does not depend on the view. The light is found among the lights by where
+ * its object sits. */
+void enso_light_shadow(KernelGlobals &kg,
+                       const ShadingData &sd,
+                       float4x4 light_matrix,
+                       float3 position,
+                       float &visibility)
+{
+  visibility = 1.0f;
+  if (kg.pipe.use_lighting_nodes) [[static_branch]] {
+#if (defined(GPU_FRAGMENT_SHADER) && defined(SRT_CONSTANT_use_lighting_nodes)) || \
+    defined(GLSL_CPP_STUBS)
+    eevee::light::VisibleLightIterator iter;
+    light_iter_init(kg, sd, iter);
+    while (light_iter_next(kg, iter)) {
+      if (light_iter_should_skip(kg, iter, sd.P)) {
+        continue;
+      }
+      int light_index = iter.index_get();
+      ObjectMatrices light_object = kg.light_matrices_get(light_index);
+      float3 dp = light_object.model[3].xyz - light_matrix[3].xyz;
+      float3 dz = light_object.model[2].xyz - light_matrix[2].xyz;
+      if (dot(dp, dp) < 1e-6f && dot(dz, dz) < 1e-5f) {
+        float4 shadow_color;
+        node_shadow_raycast_impl(kg, sd, light_index, position, 0.0f, shadow_color);
+        visibility = shadow_color.r;
+      }
+    }
+#endif
+  }
+}
+
 float4 node_attribute_light_impl([[resource_table]] KernelGlobals &kg,
                                  const int light_index,
                                  uint attr_hash)

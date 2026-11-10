@@ -572,13 +572,13 @@ static void node_declare(NodeDeclarationBuilder &b)
   b.add_input<decl::Vector>("Normal"_ustr)
       .hide_value();
   b.add_input<decl::Float>("Shadow Distance"_ustr)
-      .default_value(2.0f)
+      .default_value(0.0f)
       .min(0.0f)
       .max(1000.0f)
       .subtype(PROP_DISTANCE)
       .description("The node looks this far toward the light for something that blocks it, and "
-                   "finds the shadows by itself: no Mask needed. Only things inside the camera "
-                   "view can cast these shadows. 0 turns it off");
+                   "finds contact shadows by itself. They are found on screen, so they only see "
+                   "what is inside the camera view and they change as the view moves. 0 is off");
   b.add_output<decl::Float>("Shade"_ustr)
       .description("Light with all shadows: 1 lit, 0 in any shadow");
   b.add_output<decl::Float>("Light"_ustr)
@@ -1026,6 +1026,11 @@ static void node_declare(NodeDeclarationBuilder &b)
   b.add_output<decl::Float>("Strength"_ustr).description("Power of the light");
   b.add_output<decl::Vector>("Position"_ustr).description("Where the light is");
   b.add_output<decl::Float>("Distance"_ustr).description("Distance from the surface to the light");
+  b.add_output<decl::Float>("Shadow"_ustr)
+      .description(
+          "The light's real shadow: 1 where it reaches the surface, 0 where something blocks it. "
+          "Connect it to the Mask of Ensō Shade Info. It comes from the light's shadow maps, so "
+          "it stays the same from any view");
 }
 
 static void node_buts(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
@@ -1067,6 +1072,8 @@ static int node_gpu(GPUMaterial *mat,
   }
   GPUNodeLink *matrix = ob ? GPU_uniform(&ob->object_to_world()[0][0]) :
                              GPU_uniform(&no_matrix[0][0]);
+  /* The Shadow output reads the light's shadow maps, which needs the lighting data. */
+  GPU_material_flag_set(mat, GPU_MATFLAG_LIGHTING);
   return GPU_stack_link(mat,
                         node,
                         "node_enso_light_select",
@@ -1076,6 +1083,7 @@ static int node_gpu(GPUMaterial *mat,
                         GPU_uniform(white),
                         GPU_uniform(&power),
                         GPU_uniform(&is_sun),
+                        GPU_kernel_globals(),
                         GPU_shading_data());
 }
 

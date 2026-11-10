@@ -98,6 +98,12 @@ struct VisibleLightIterator {
   }
 
  public:
+  /* Ensō: the light the iterator is on, for code that walks the lights by hand. */
+  int index_get()
+  {
+    return index;
+  }
+
   void init(const eevee::LightRenderData &lrd,
             float2 pixel,
             float linear_view_z,

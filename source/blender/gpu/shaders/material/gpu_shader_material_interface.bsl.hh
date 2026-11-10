@@ -518,6 +518,15 @@ void enso_object_color([[resource_table]] KernelGlobals & /*kg*/, uint /*id*/, f
   color = float4(1.0f);
 }
 
+void enso_light_shadow([[resource_table]] KernelGlobals & /*kg*/,
+                       const ShadingData & /*sd*/,
+                       float4x4 /*light_matrix*/,
+                       float3 /*position*/,
+                       float &visibility)
+{
+  visibility = 1.0f;
+}
+
 /* Image Texture Node. */
 
 float texture_lod_bias_get([[resource_table]] KernelGlobals & /*kg*/)

@@ -435,13 +435,16 @@ void node_enso_light_select(float4x4 light_matrix,
                             float3 light_color,
                             float light_power,
                             float is_sun,
+                            [[resource_table]] KernelGlobals &kg,
                             const ShadingData &sd,
                             float3 &direction,
                             float4 &color,
                             float &strength,
                             float3 &position,
-                            float &distance)
+                            float &distance,
+                            float &shadow)
 {
+  shadow = 1.0f;
   direction = float3(0.0f, 0.0f, 1.0f);
   color = float4(light_color, 1.0f);
   strength = light_power;
@@ -455,6 +458,8 @@ void node_enso_light_select(float4x4 light_matrix,
     return;
   }
   position = light_matrix[3].xyz;
+  /* The light's real shadow at this point: 1 where it reaches, 0 where something blocks it. */
+  enso_light_shadow(kg, sd, light_matrix, sd.P, shadow);
   float3 to_light = position - sd.P;
   distance = length(to_light);
   if (is_sun > 0.5f) {
