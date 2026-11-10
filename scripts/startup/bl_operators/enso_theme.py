@@ -16,7 +16,7 @@ import bpy
 from bpy.app.handlers import persistent
 
 ENSO_THEME_FILE = "Enso_Ink_and_Paper.xml"
-ENSO_THEME_VERSION = 6
+ENSO_THEME_VERSION = 7
 
 classes = ()
 

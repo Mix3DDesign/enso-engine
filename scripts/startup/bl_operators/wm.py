@@ -3599,11 +3599,11 @@ class WM_MT_splash(Menu):
             # Links if no recent files.
             col2_title.label(text="Getting Started")
 
-            col2.operator("wm.url_open_preset", text="Manual", icon='URL').type = 'MANUAL'
-            col2.operator("wm.url_open", text="Support", icon='URL').url = "https://www.blender.org/support/"
-            col2.operator("wm.url_open", text="User Communities", icon='URL').url = "https://www.blender.org/community/"
-            col2.operator("wm.url_open", text="Get Involved", icon='URL').url = "https://www.blender.org/get-involved/"
-            col2.operator("wm.url_open_preset", text="Blender Website", icon='URL').type = 'BLENDER'
+            col2.operator("wm.url_open", text="Ensō Website", icon='URL').url = "https://enso.mix3ddesign.com"
+            col2.operator("wm.url_open", text="Tutorials on YouTube", icon='URL').url = "https://www.youtube.com/@Mix3Design"
+            col2.operator("wm.url_open", text="Mix 3D Design Shop", icon='URL').url = "https://mix3ddesign.com"
+            col2.operator("wm.url_open", text="Source Code (GPL)", icon='URL').url = "https://github.com/Mix3DDesign/enso-engine"
+            col2.operator("wm.url_open_preset", text="Blender Manual", icon='URL').type = 'MANUAL'
 
         col_sep = layout.column()
         col_sep.separator()
@@ -3620,8 +3620,10 @@ class WM_MT_splash(Menu):
 
         col2 = split.column()
 
-        col2.operator("wm.url_open_preset", text="What's New", icon='URL').type = 'RELEASE_NOTES'
-        col2.operator("wm.url_open_preset", text="Donate to Blender", icon='FUND').type = 'FUND'
+        # Ensō: the project lives on its supporters, so the way to help is always one click away.
+        col2.operator("wm.url_open", text="Support Ensō on Patreon", icon='FUND').url = "https://www.patreon.com/Mix3dDesign"
+        col2.operator("wm.url_open", text="Get the Ensō NPR Pack", icon='URL').url = (
+            "https://mix3ddesign.com/posts/enso-npr-pack-19-174753144")
 
         layout.separator()
 
@@ -3673,6 +3675,8 @@ class WM_MT_splash_about(Menu):
         col.emboss = 'PULLDOWN_MENU'
         col.operator("wm.url_open", text="Mix 3D Design", icon='URL').url = "https://mix3ddesign.com"
         col.operator("wm.url_open", text="YouTube", icon='URL').url = "https://www.youtube.com/@Mix3Design"
+        col.operator("wm.url_open", text="Support Ensō on Patreon", icon='FUND').url = "https://www.patreon.com/Mix3dDesign"
+        col.operator("wm.url_open", text="Source Code", icon='URL').url = "https://github.com/Mix3DDesign/enso-engine"
         col.separator(factor=2.0)
         col.operator("wm.url_open", text="License (GPL)", icon='URL').url = "https://www.blender.org/about/license/"
         col.operator("wm.url_open_preset", text="Blender Credits", icon='URL').type = 'CREDITS'

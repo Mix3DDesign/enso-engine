@@ -101,7 +101,7 @@ static PyStructSequence_Field app_info_fields[] = {
      "\n"
      ":type: str\n"},
     {"enso_version_string",
-     "The Ensō Engine product version formatted as a string, e.g. \"Ensō Engine 1.0 (5.3.0)\". "
+     "The Ensō Engine product version formatted as a string, e.g. \"Ensō Engine 1.1 (5.3.0)\". "
      "Only present in Ensō Engine builds, so add-ons can use "
      "``hasattr(bpy.app, \"enso_version_string\")`` to detect it\n"
      "\n"

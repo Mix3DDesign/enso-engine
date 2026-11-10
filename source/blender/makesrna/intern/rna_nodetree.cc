@@ -6278,6 +6278,20 @@ static void def_sh_tex_coord(BlenderRNA * /*brna*/, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 
+static void def_sh_enso_light_select(BlenderRNA * /*brna*/, StructRNA *srna)
+{
+  PropertyRNA *prop;
+
+  prop = RNA_def_property(srna, "object", PROP_POINTER, PROP_NONE);
+  RNA_def_property_pointer_sdna(prop, nullptr, "id");
+  RNA_def_property_struct_type(prop, "Object");
+  RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_ui_text(
+      prop, "Light", "The light this material listens to. An empty also works as a direction");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update_relations");
+}
+
 static void def_sh_vect_transform(BlenderRNA * /*brna*/, StructRNA *srna)
 {
   static const EnumPropertyItem prop_vect_type_items[] = {
@@ -10961,6 +10975,19 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("ShaderNode", "ShaderNodeEnsoScreenRim");
   define("ShaderNode", "ShaderNodeEnsoLineDetect");
   define("ShaderNode", "ShaderNodeEnsoHatching");
+  define("ShaderNode", "ShaderNodeEnsoCelBands");
+  define("ShaderNode", "ShaderNodeEnsoSmoothNormals");
+  define("ShaderNode", "ShaderNodeEnsoFaceShadow");
+  define("ShaderNode", "ShaderNodeEnsoHairRing");
+  define("ShaderNode", "ShaderNodeEnsoFaceMap");
+  define("ShaderNode", "ShaderNodeEnsoLightSelect", def_sh_enso_light_select);
+  define("ShaderNode", "ShaderNodeEnsoMask");
+  define("ShaderNode", "ShaderNodeEnsoPartTags");
+  define("ShaderNode", "ShaderNodeEnsoShadeInfo");
+  define("ShaderNode", "ShaderNodeEnsoHighlight");
+  define("ShaderNode", "ShaderNodeEnsoLightRim");
+  define("ShaderNode", "ShaderNodeEnsoEyeParallax");
+  define("ShaderNode", "ShaderNodeEnsoScreenCurvature");
   define("ShaderNode", "ShaderNodeFloatCurve", def_float_curve);
   define("ShaderNode", "ShaderNodeFresnel");
   define("ShaderNode", "ShaderNodeGamma");

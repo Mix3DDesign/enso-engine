@@ -21,6 +21,11 @@ _modules = [
     "constraint",
     "copy_global_transform",
     "enso_dlc",
+    "enso_face_map",
+    "enso_npr_light",
+    "enso_on_twos",
+    "enso_passes",
+    "enso_quick_rig",
     "enso_theme",
     "enso_workspaces",
     "file",
@@ -67,6 +72,11 @@ def register():
         bone_selection_sets,
         copy_global_transform,
         enso_dlc,
+        enso_face_map,
+        enso_npr_light,
+        enso_on_twos,
+        enso_passes,
+        enso_quick_rig,
         enso_theme,
         enso_workspaces,
     )
@@ -78,6 +88,9 @@ def register():
     bone_selection_sets.register()
     copy_global_transform.register()
     enso_dlc.register()
+    enso_face_map.register()
+    enso_on_twos.register()
+    enso_quick_rig.register()
     enso_theme.register()
     enso_workspaces.register()
 
@@ -88,6 +101,11 @@ def unregister():
         bone_selection_sets,
         copy_global_transform,
         enso_dlc,
+        enso_face_map,
+        enso_npr_light,
+        enso_on_twos,
+        enso_passes,
+        enso_quick_rig,
         enso_theme,
         enso_workspaces,
     )
@@ -95,6 +113,9 @@ def unregister():
     bone_selection_sets.unregister()
     copy_global_transform.unregister()
     enso_dlc.unregister()
+    enso_face_map.unregister()
+    enso_on_twos.unregister()
+    enso_quick_rig.unregister()
     enso_theme.unregister()
     enso_workspaces.unregister()
 

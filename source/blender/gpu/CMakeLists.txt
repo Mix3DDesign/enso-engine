@@ -644,6 +644,7 @@ set(GLSL_SRC
   shaders/material/gpu_shader_material_eevee_specular.bsl.hh
   shaders/material/gpu_shader_material_emission.bsl.hh
   shaders/material/gpu_shader_material_enso_brush_normals.bsl.hh
+  shaders/material/gpu_shader_material_enso_cel.bsl.hh
   shaders/material/gpu_shader_material_enso_curvature.bsl.hh
   shaders/material/gpu_shader_material_enso_ink_bleed.bsl.hh
   shaders/material/gpu_shader_material_enso_npr.bsl.hh

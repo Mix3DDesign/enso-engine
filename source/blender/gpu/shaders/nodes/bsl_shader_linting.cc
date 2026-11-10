@@ -71,6 +71,7 @@
 #include "gpu_shader_material_displacement.bsl.hh"             /* IWYU pragma: export */
 #include "gpu_shader_material_emission.bsl.hh"                 /* IWYU pragma: export */
 #include "gpu_shader_material_enso_brush_normals.bsl.hh" /* IWYU pragma: export */
+#include "gpu_shader_material_enso_cel.bsl.hh" /* IWYU pragma: export */
 #include "gpu_shader_material_enso_curvature.bsl.hh" /* IWYU pragma: export */
 #include "gpu_shader_material_enso_ink_bleed.bsl.hh" /* IWYU pragma: export */
 #include "gpu_shader_material_enso_npr.bsl.hh" /* IWYU pragma: export */

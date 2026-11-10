@@ -562,7 +562,10 @@ class NODE_MT_shader_node_npr_base(node_add_menu.NodeMenu):
                                       ('CEL_RIM', "For Each Light: Cel + Rim", "cel"),
                                       ('SOFT', "For Each Light: Soft Bands", "light"),
                                       ('TINTED', "For Each Light: Tinted Shadows", "shadow"),
-                                      ('HALFTONE', "For Each Light: Halftone", "shadow")):
+                                      ('HALFTONE', "For Each Light: Halftone", "shadow"),
+                                      ('CLEAN', "For Each Light: Clean Cel", "cel"),
+                                      ('FACE', "For Each Light: Anime Face", "cel"),
+                                      ('HAIR', "For Each Light: Anime Hair", "light")):
                 layout.operator("node.enso_add_for_each_light", text=text,
                                 icon_value=ic(icon)).style = style
         self.node_operator(layout, "ShaderNodeLightAccumulation", poll=eevee)
@@ -572,11 +575,29 @@ class NODE_MT_shader_node_npr_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ShaderNodeRaycast", poll=object_material_shader_nodes_poll(context))
         self.node_operator(layout, "ShaderNodeShaderToRGB", poll=eevee)
         layout.separator()
+        layout.label(text="Clean Cel (EEVEE)", icon_value=ic("cel"))
+        self.node_operator(layout, "ShaderNodeEnsoCelBands", poll=eevee, icon_value=ic("cel"))
+        self.node_operator(layout, "ShaderNodeEnsoSmoothNormals", poll=eevee, icon_value=ic("normals"))
+        self.node_operator(layout, "ShaderNodeEnsoFaceShadow", poll=eevee, icon_value=ic("face"))
+        self.node_operator(layout, "ShaderNodeEnsoFaceMap", poll=eevee, icon_value=ic("facemap"))
+        self.node_operator(layout, "ShaderNodeEnsoHairRing", poll=eevee, icon_value=ic("hair"))
+        layout.operator("object.enso_bake_face_map", text="Bake Face Map...", icon_value=ic("facemap"))
+        layout.separator()
+        layout.label(text="Light & Selection (EEVEE)", icon_value=ic("mask"))
+        self.node_operator(layout, "ShaderNodeEnsoLightSelect", poll=eevee, icon_value=ic("light"))
+        self.node_operator(layout, "ShaderNodeEnsoShadeInfo", poll=eevee, icon_value=ic("shadow"))
+        self.node_operator(layout, "ShaderNodeEnsoHighlight", poll=eevee, icon_value=ic("light"))
+        self.node_operator(layout, "ShaderNodeEnsoLightRim", poll=eevee, icon_value=ic("light"))
+        self.node_operator(layout, "ShaderNodeEnsoMask", poll=eevee, icon_value=ic("mask"))
+        self.node_operator(layout, "ShaderNodeEnsoPartTags", poll=eevee, icon_value=ic("mask"))
+        self.node_operator(layout, "ShaderNodeEnsoScreenCurvature", poll=eevee, icon_value=ic("curvature"))
+        self.node_operator(layout, "ShaderNodeEnsoEyeParallax", poll=eevee, icon_value=ic("enso"))
+        layout.separator()
         layout.label(text="Ink & Paint (EEVEE)", icon_value=ic("ink"))
         self.node_operator(layout, "ShaderNodeEnsoInkBleed", poll=eevee, icon_value=ic("leak"))
-        self.node_operator(layout, "ShaderNodeEnsoCurvature", poll=eevee, icon_value=ic("enso"))
+        self.node_operator(layout, "ShaderNodeEnsoCurvature", poll=eevee, icon_value=ic("curvature"))
         self.node_operator(layout, "ShaderNodeEnsoBrushNormals", poll=eevee, icon_value=ic("brush"))
-        self.node_operator(layout, "ShaderNodeEnsoLineDetect", poll=eevee, icon_value=ic("ink"))
+        self.node_operator(layout, "ShaderNodeEnsoLineDetect", poll=eevee, icon_value=ic("line"))
         self.node_operator(layout, "ShaderNodeEnsoScreenRim", poll=eevee, icon_value=ic("light"))
         self.node_operator(layout, "ShaderNodeEnsoHatching", poll=eevee, icon_value=ic("shadow"))
         layout.separator()

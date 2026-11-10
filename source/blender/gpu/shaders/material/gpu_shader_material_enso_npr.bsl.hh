@@ -249,3 +249,137 @@ void node_enso_hatching(float shade,
   float l2 = (d2 > 0.002f) ? enso_hatch_stripes(ruv.x, d2 * 0.55f, aa) : 0.0f;
   crosshatch = (dark > 0.002f) ? max(l1, l2) : 0.0f;
 }
+
+/* ------------------------------------------------------------------------------------------ */
+/* Curvature shared by Ensō Curvature and Ensō Screen Curvature.
+ *
+ * Looks at the pre-pass normals on two rings around the pixel and measures how much they lean
+ * away from the centre (a bump or outer edge) or toward it (a dent or crease), per meter on the
+ * surface. The result is that bend times the radius, so an edge gets a band as wide as the
+ * radius whose strength follows the angle of the edge, and it does not change with the camera
+ * distance. Other objects and far depth steps are left out; another object touching the
+ * surface inside the radius is reported as contact. */
+void enso_curvature_core([[resource_table]] KernelGlobals &kg,
+                         const ShadingData &sd,
+                         float radius,
+                         float depth_threshold,
+                         float &curvature,
+                         float &contact)
+{
+  curvature = 0.0f;
+  contact = 0.0f;
+#if defined(GPU_FRAGMENT_SHADER) || defined(GLSL_CPP_STUBS)
+  float2 size;
+  enso_prepass_size(kg, size);
+  float2 px = sd.frag_co.xy;
+  bool v0;
+  float3 N0;
+  float d0;
+  uint id0;
+  enso_prepass_fetch(kg, px, v0, N0, d0, id0);
+  if (!v0 || d0 > 1e9f || size.x <= 1.0f) {
+    return;
+  }
+  const ViewMatrices view = kg.view_matrices_get(sd);
+  float zv = enso_npr_view_z(view, sd.P);
+  float ppm = enso_npr_px_per_m(view, sd.P, size);
+  if (zv < 1e-6f || ppm < 1e-6f) {
+    return;
+  }
+  /* Pre-pass depth unit, so depth steps below are in meters. */
+  float unit = d0 / zv;
+  /* Never less than a few pixels: one pixel only sees the facets of the mesh. */
+  float r_px = clamp(max(radius, 0.0f) * ppm, 3.0f, 96.0f);
+  float r_m = r_px / ppm;
+  float3 vx = normalize(view.viewinv[0].xyz);
+  float3 vy = normalize(view.viewinv[1].xyz);
+  float3 dPdx = gpu_dfdx(sd.P);
+  float3 dPdy = gpu_dfdy(sd.P);
+  float3 vz = float3(view.viewmat[0][2], view.viewmat[1][2], view.viewmat[2][2]);
+  float slope = (abs(dot(vz, dPdx)) + abs(dot(vz, dPdy))) * r_px * 1.5f;
+  float step_m = max(depth_threshold, r_m * 2.0f) + slope;
+  float jit;
+  enso_pixel_jitter(kg, px, jit);
+  /* Taps are taken in opposite pairs and only counted when both sides are on this surface.
+   * At a silhouette one side is missing, and counting the other alone would read the outline
+   * of every round shape as an edge. */
+  const int pairs = 4;
+  float sum = 0.0f;
+  float weight = 0.0f;
+  for (int ring = 0; ring < 3; ring++) {
+    float f = (ring == 0) ? 1.0f : ((ring == 1) ? 0.66f : 0.33f);
+    float rr = r_px * f;
+    for (int i = 0; i < pairs; i++) {
+      float a = (float(i) + 0.37f * float(ring) + jit) * (3.14159265f / float(pairs));
+      float2 dir = float2(cos(a), sin(a));
+      float3 D = vx * dir.x + vy * dir.y;
+      bool ok = true;
+      float pair_sum = 0.0f;
+      for (int side = 0; side < 2; side++) {
+        float sgn = (side == 0) ? 1.0f : -1.0f;
+        float2 q = px + dir * (rr * sgn);
+        if (any(lessThan(q, float2(0.0f))) || any(greaterThanEqual(q, size))) {
+          ok = false;
+          continue;
+        }
+        bool vq;
+        float3 Nq;
+        float dq;
+        uint idq;
+        enso_prepass_fetch(kg, q, vq, Nq, dq, idq);
+        if (!vq || dq > 1e9f) {
+          ok = false;
+          continue;
+        }
+        float gap = (dq - d0) / unit;
+        if (idq != id0) {
+          if (abs(gap) < r_m * 1.5f + slope) {
+            contact = max(contact, 1.0f - f * 0.5f);
+          }
+          ok = false;
+          continue;
+        }
+        if (abs(gap) > step_m) {
+          ok = false;
+          continue;
+        }
+        float dist = sqrt((rr / ppm) * (rr / ppm) + gap * gap);
+        pair_sum += dot(Nq - N0, D) * sgn / max(dist, 1e-6f);
+      }
+      if (ok) {
+        sum += pair_sum;
+        weight += 2.0f;
+      }
+    }
+  }
+  curvature = (weight > 0.0f) ? (sum / weight) * r_m : 0.0f;
+#endif
+}
+
+/* Turns the raw bend into a clean 0..1 mask: small bends (the facets of a low-poly mesh) are
+ * dropped by the threshold, the rest is scaled by the contrast. */
+float enso_curvature_shape(float value, float threshold, float contrast)
+{
+  return saturate((value - max(threshold, 0.0f)) * max(contrast, 0.0f));
+}
+
+/* ------------------------------------------------------------------------------------------ */
+/* Ensō Screen Curvature: edges and cavities from the pre-pass normals around the pixel. */
+[[node]]
+void node_enso_screen_curvature(float radius,
+                                float strength,
+                                float threshold,
+                                float depth_threshold,
+                                [[resource_table]] KernelGlobals &kg,
+                                const ShadingData &sd,
+                                float &convex,
+                                float &concave,
+                                float &signed_curvature)
+{
+  float c;
+  float contact;
+  enso_curvature_core(kg, sd, radius, depth_threshold, c, contact);
+  convex = enso_curvature_shape(c, threshold, strength);
+  concave = enso_curvature_shape(-c, threshold, strength);
+  signed_curvature = convex - concave;
+}

@@ -10,6 +10,7 @@
 
 #include "GPU_material.hh"
 
+#include "node_shader_enso_pass.hh"
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -52,8 +53,12 @@ static int node_gpu(GPUMaterial *mat,
                     GPUNodeStack *out)
 {
   GPU_material_flag_set(mat, GPU_MATFLAG_RAYCAST);
-  return GPU_stack_link(
+  const bool ok = GPU_stack_link(
       mat, node, "node_enso_screen_rim", in, out, GPU_kernel_globals(), GPU_shading_data());
+  if (ok) {
+    enso_pass_write(mat, "Enso Screen Rim", out[0].link);
+  }
+  return ok;
 }
 
 }  // namespace nodes::node_shader_enso_screen_rim_cc
@@ -110,8 +115,12 @@ static int node_gpu(GPUMaterial *mat,
                     GPUNodeStack *out)
 {
   GPU_material_flag_set(mat, GPU_MATFLAG_RAYCAST);
-  return GPU_stack_link(
+  const bool ok = GPU_stack_link(
       mat, node, "node_enso_line_detect", in, out, GPU_kernel_globals(), GPU_shading_data());
+  if (ok) {
+    enso_pass_write(mat, "Enso Line", out[0].link);
+  }
+  return ok;
 }
 
 }  // namespace nodes::node_shader_enso_line_detect_cc
@@ -184,6 +193,75 @@ void register_node_type_sh_enso_hatching()
   ntype.nclass = NODE_CLASS_TEXTURE;
   ntype.declare = file_ns::node_declare;
   ntype.gpu_fn = file_ns::node_gpu;
+  bke::node_register_type(ntype);
+}
+
+/* -------------------------------------------------------------------- Ensō Screen Curvature */
+namespace nodes::node_shader_enso_screen_curvature_cc {
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Float>("Radius"_ustr)
+      .default_value(0.02f)
+      .min(0.0f)
+      .max(10.0f)
+      .subtype(PROP_DISTANCE)
+      .description("Size of the edges and cavities in meters on the object");
+  b.add_input<decl::Float>("Strength"_ustr)
+      .default_value(4.0f)
+      .min(0.0f)
+      .max(50.0f);
+  b.add_input<decl::Float>("Threshold"_ustr)
+      .default_value(0.06f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description(
+          "Bends weaker than this are ignored. Raise it to hide the facets of a low-poly or "
+          "flat shaded mesh and keep only the real edges");
+  b.add_input<decl::Float>("Depth Threshold"_ustr)
+      .default_value(0.1f)
+      .min(0.0f)
+      .max(100.0f)
+      .subtype(PROP_DISTANCE)
+      .description("Bigger depth steps than this are treated as another surface and ignored");
+  b.add_output<decl::Float>("Convex"_ustr)
+      .description("Outer edges and corners: wear, highlights");
+  b.add_output<decl::Float>("Concave"_ustr)
+      .description("Creases and cavities: dirt, occlusion, ink");
+  b.add_output<decl::Float>("Signed"_ustr)
+      .description("Positive on edges, negative in cavities");
+}
+
+static int node_gpu(GPUMaterial *mat,
+                    bNode *node,
+                    bNodeExecData * /*execdata*/,
+                    GPUNodeStack *in,
+                    GPUNodeStack *out)
+{
+  GPU_material_flag_set(mat, GPU_MATFLAG_RAYCAST);
+  const bool ok = GPU_stack_link(
+      mat, node, "node_enso_screen_curvature", in, out, GPU_kernel_globals(), GPU_shading_data());
+  if (ok) {
+    enso_pass_write(mat, "Enso Convex", out[0].link);
+    enso_pass_write(mat, "Enso Concave", out[1].link);
+  }
+  return ok;
+}
+
+}  // namespace nodes::node_shader_enso_screen_curvature_cc
+
+void register_node_type_sh_enso_screen_curvature()
+{
+  namespace file_ns = nodes::node_shader_enso_screen_curvature_cc;
+  static bke::bNodeType ntype;
+  sh_node_type_base(&ntype, "ShaderNodeEnsoScreenCurvature"_ustr);
+  ntype.ui_name = "Ensō Screen Curvature";
+  ntype.ui_description = "Edges and cavities found on screen from the scene normals: no setup, works on any mesh and follows deformation (EEVEE)";
+  ntype.nclass = NODE_CLASS_INPUT;
+  ntype.declare = file_ns::node_declare;
+  ntype.gpu_fn = file_ns::node_gpu;
+  ntype.default_width = 170.0f;
   bke::node_register_type(ntype);
 }
 

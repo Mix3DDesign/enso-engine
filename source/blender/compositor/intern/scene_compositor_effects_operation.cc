@@ -161,6 +161,30 @@ static Result *get_effect_input(Context &context,
   return result;
 }
 
+/* Ensō: an image input whose name starts with "Pass: " receives the render pass of that name
+ * (Depth, Normal, an AOV such as "Enso Line"...) instead of a constant, so an effect can work
+ * from more than the rendered image. Returns null when the input is an ordinary one. */
+static Result *get_effect_pass_input(Context &context,
+                                     const Scene &scene,
+                                     const bNodeTreeInterfaceSocket &input_socket)
+{
+  if (!ELEM(input_socket.socket_typeinfo()->type, SOCK_RGBA, SOCK_FLOAT, SOCK_VECTOR)) {
+    return nullptr;
+  }
+  const StringRef name = input_socket.name();
+  const StringRef prefix = "Pass: ";
+  if (!name.startswith(prefix)) {
+    return nullptr;
+  }
+  const std::string pass_name = std::string(name.drop_prefix(prefix.size()));
+  Result pass = context.get_pass(&scene, 0, pass_name.c_str());
+  Result *result = new Result(context.create_result(pass.type()));
+  result->set_precision(pass.precision());
+  result->share_data(pass);
+  pass.release();
+  return result;
+}
+
 void SceneCompositorEffectsOperation::execute()
 {
   const Scene &scene = this->context().get_scene();
@@ -227,7 +251,10 @@ void SceneCompositorEffectsOperation::execute()
     Vector<std::unique_ptr<Result>> temporary_inputs;
     for (const bNodeTreeInterfaceSocket *input_socket : node_group.interface_inputs()) {
       if (input_socket != node_group.interface_inputs().first()) {
-        Result *input_result = get_effect_input(this->context(), effect_inputs_ptr, *input_socket);
+        Result *input_result = get_effect_pass_input(this->context(), scene, *input_socket);
+        if (input_result == nullptr) {
+          input_result = get_effect_input(this->context(), effect_inputs_ptr, *input_socket);
+        }
         effect_operation->map_input_to_result(input_socket->identifier, input_result);
         temporary_inputs.append(std::unique_ptr<Result>(input_result));
         continue;

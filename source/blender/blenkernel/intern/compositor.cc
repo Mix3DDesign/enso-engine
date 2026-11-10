@@ -538,6 +538,16 @@ static void add_used_passes_recursive(const bNodeTree *node_tree,
     return;
   }
 
+  /* Ensō: effect inputs named "Pass: <name>" read that render pass. */
+  node_tree->ensure_interface_cache();
+  for (const bNodeTreeInterfaceSocket *input_socket : node_tree->interface_inputs()) {
+    const StringRef name = input_socket->name();
+    const StringRef prefix = "Pass: ";
+    if (name.startswith(prefix)) {
+      used_passes.add(std::string(name.drop_prefix(prefix.size())));
+    }
+  }
+
   node_tree->ensure_topology_cache();
   for (const bNode *node : node_tree->all_nodes()) {
     if (node->is_muted()) {

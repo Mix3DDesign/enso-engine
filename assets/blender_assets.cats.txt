@@ -69,3 +69,4 @@ c676fe02-8d25-49a1-b672-11aee0918221:Hair/Read:Hair-Read
 f8291c19-ec70-4a53-82d5-40b68a0c3a86:Shading:Shading
 2571be08-e20a-48a8-80c8-26171509f863:Shading/Utilities:Shading-Utilities
 9cd554d5-1d8f-43dd-a2ab-41635557769b:Shading/Utilities/Vector:Shading-Utilities-Vector
+2f6a9c1e-5b7d-4e83-9a41-e7c0d15b3a62:Compositing/Ensō Effects:Compositing-Ensō Effects

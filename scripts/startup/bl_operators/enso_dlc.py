@@ -26,6 +26,7 @@ import shutil
 import zipfile
 
 import bpy
+from bpy.props import BoolProperty
 from bpy.props import EnumProperty, StringProperty
 from bpy.types import Operator, Panel
 from bpy.app.handlers import persistent
@@ -615,8 +616,17 @@ light (EEVEE) and adds the results, so every light gets its own cel shading in i
             ('SOFT', "Soft Bands", "Three soft painted bands with spot light cutoff smoothing"),
             ('TINTED', "Tinted Shadows", "Each light paints its color into the lit side and a tinted color into its shadow side"),
             ('HALFTONE', "Halftone", "Comic halftone dots that grow with the light"),
+            ('CLEAN', "Clean Cel", "Rounded normals and pixel-smooth cel bands: clean shadows on any mesh"),
+            ('FACE', "Anime Face", "Face shadow that sweeps left and right with each light, no painting or baking"),
+            ('HAIR', "Anime Hair", "Tube normals for clean bands on hair plus the zigzag ring highlight"),
         ),
         default='CEL',
+    )
+    single_node: BoolProperty(
+        name="Single Node",
+        description="Wrap the setup in one node with a Base Color input. Press Tab on it to open "
+                    "and change the nodes inside. Turn off to get the loose nodes in a frame",
+        default=True,
     )
 
     @classmethod
@@ -631,7 +641,11 @@ light (EEVEE) and adds the results, so every light gets its own cel shading in i
             n.select = False
         x, y = context.space_data.cursor_location
         label = bpy.types.UILayout.enum_item_name(self, "style", self.style)
-        build_for_each_light(tree, self.style, (x, y), label)
+        if self.single_node:
+            node = build_for_each_light_group(tree, self.style, (x, y), label)
+            tree.nodes.active = node
+        else:
+            build_for_each_light(tree, self.style, (x, y), label)
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -639,6 +653,46 @@ light (EEVEE) and adds the results, so every light gets its own cel shading in i
         if 'FINISHED' in result:
             bpy.ops.node.translate_attach_remove_on_cancel('INVOKE_DEFAULT')
         return result
+
+
+def build_for_each_light_group(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
+    """The For Each Light setup as one node: a group with Base Color in and Shader out."""
+    group = bpy.data.node_groups.new("Ensō Lights: " + label, "ShaderNodeTree")
+    group.interface.new_socket("Shader", in_out='OUTPUT', socket_type='NodeSocketShader')
+    col = group.interface.new_socket("Base Color", in_out='INPUT', socket_type='NodeSocketColor')
+    col.default_value = (0.8, 0.8, 0.8, 1.0)
+    col.description = "Colour of the surface where the lights reach it"
+    hi = group.interface.new_socket("Highlight Color", in_out='INPUT', socket_type='NodeSocketColor')
+    hi.default_value = (1.0, 1.0, 1.0, 1.0)
+    hi.description = "Colour of highlights, for the styles that have them"
+    acc = build_for_each_light(group, style, (0.0, 0.0), label)
+    gin = group.nodes.new("NodeGroupInput")
+    gin.location = (acc.location.x - 220.0, acc.location.y - 260.0)
+    gout = group.nodes.new("NodeGroupOutput")
+    gout.location = (acc.location.x + 260.0, acc.location.y)
+    # The base colour also goes to the Flat Color pass, and face and hair styles tag their part.
+    try:
+        tags = group.nodes.new("ShaderNodeEnsoPartTags")
+        tags.location = (acc.location.x - 220.0, acc.location.y - 120.0)
+        tags.hide = True
+        if style == 'FACE':
+            tags.inputs["Face"].default_value = 1.0
+        elif style == 'HAIR':
+            tags.inputs["Hair"].default_value = 1.0
+        group.links.new(gin.outputs["Base Color"], tags.inputs["Color"])
+        group.links.new(tags.outputs["Color"], acc.inputs["Diffuse Color"])
+    except RuntimeError:
+        group.links.new(gin.outputs["Base Color"], acc.inputs["Diffuse Color"])
+    group.links.new(gin.outputs["Highlight Color"], acc.inputs["Glossy Color"])
+    group.links.new(acc.outputs[0], gout.inputs[0])
+    for n in group.nodes:
+        n.select = False
+    node = tree.nodes.new("ShaderNodeGroup")
+    node.node_tree = group
+    node.location = location
+    node.width = 220.0
+    node.select = True
+    return node
 
 
 def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
@@ -730,6 +784,48 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
         tint.inputs[6].default_value = (0.08, 0.05, 0.16, 1.0)
         links.new(info.outputs["Color"], tint.inputs[7])
         diffuse = tint.outputs[2]
+    elif style in {'CLEAN', 'FACE', 'HAIR'}:
+        # Ensō clean cel: smooth normals feed the light, Cel Bands cut it with a pixel-smooth edge.
+        cel = add("ShaderNodeEnsoCelBands", -560, -60)
+        if style == 'FACE':
+            face = add("ShaderNodeEnsoFaceShadow", -840, -60)
+            face.inputs["Roundness"].default_value = 0.9
+            links.new(ev.outputs["Direction"], face.inputs["Light Direction"])
+            cel.location = (x - 560, y + 200)
+            # The face shadow already has a smooth edge; the light's own shadows and spot
+            # cutoff still apply through the mask.
+            # Real cast shadows put small dark shapes in the eye sockets and under the nose,
+            # so they are off by default. Raise Cast Shadows to let hair and hats shade the face.
+            cast = add("ShaderNodeMix", -760, -300, "Cast Shadows")
+            cast.data_type = 'FLOAT'
+            cast.inputs[0].default_value = 0.0
+            cast.inputs[2].default_value = 1.0
+            links.new(ev.outputs["Mask"], cast.inputs[3])
+            shade = math('MULTIPLY', -560, -60, face.outputs["Shade"], cast.outputs[0], "Face Shade")
+            nodes.remove(cel)
+            nodes.remove(lit.node)
+            lit_col = mul_color(info.outputs["Color"], shade, -150, 60, "Light Color")
+            diffuse = lit_col
+        else:
+            sn = add("ShaderNodeEnsoSmoothNormals", -1340, -160)
+            if style == 'HAIR':
+                sn.inputs["Tube"].default_value = 1.0
+                sn.inputs["Roundness"].default_value = 0.9
+            links.new(sn.outputs["Normal"], ev.inputs["Normal"])
+            links.new(lit, cel.inputs["Value"])
+            if style == 'CLEAN':
+                cel.inputs["Bands"].default_value = 2.0
+            diffuse = mul_color(info.outputs["Color"], cel.outputs["Shade"], -150, 60, "Light Color")
+            if style == 'HAIR':
+                # The ring: hair flows down from the top of the head; the node splits it into
+                # locks so the ring zigzags. Plug a texture in Strands to draw your own.
+                ring = add("ShaderNodeEnsoHairRing", -940, -380)
+                ring.inputs["Position"].default_value = 0.65
+                links.new(ev.outputs["Direction"], ring.inputs["Light Direction"])
+                # Only where the light reaches.
+                on = math('MULTIPLY', -700, -380, ring.outputs["Ring"], cel.outputs["Shade"], "Ring In Light")
+                glossy = mul_color(info.outputs["Color"], on, -150, -300, "Ring Color")
+                links.new(glossy, acc.inputs["Glossy Light"])
     elif style == 'HALFTONE':
         tc = add("ShaderNodeTexCoord", -1100, -320)
         vor = add("ShaderNodeTexVoronoi", -880, -320, "Dots")
@@ -769,6 +865,51 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
             rim = mul_color(rim_edge, bands, -620, -300, "Rim On Lit Side")
             rim = mul_color(rim, info.outputs["Color"], -400, -300, "Rim Color")
             diffuse = add_color(diffuse, rim, 80, -140, "Add Rim")
+    # Per-light Ensō settings (Light properties > Ensō NPR Light). A light without them reads
+    # zero everywhere, which leaves the light as it is.
+    def light_setting(name, dx, dy):
+        a = add("ShaderNodeAttribute", dx, dy, name)
+        a.attribute_type = 'LIGHT'
+        a.attribute_name = name
+        a.hide = True
+        return a
+
+    if style in {'CLEAN', 'HAIR'}:
+        soft = light_setting("enso_soft", -820, 330)
+        shift = light_setting("enso_shift", -820, 290)
+        links.new(soft.outputs["Fac"], cel.inputs["Softness"])
+        links.new(math('ADD', -700, 290, cel.inputs["Threshold"].default_value, shift.outputs["Fac"],
+                       "Band Shift"), cel.inputs["Threshold"])
+    # Coloured shadows: the part of the surface this light does not reach gets its shadow colour.
+    def gray_of(col, dx, dy):
+        bw = add("ShaderNodeRGBToBW", dx, dy)
+        bw.hide = True
+        links.new(col, bw.inputs[0])
+        return bw.outputs[0]
+
+    reach = math('DIVIDE', 80, 330, gray_of(diffuse, -60, 330),
+                 math('MAXIMUM', -60, 290, gray_of(info.outputs["Color"], -200, 290), 0.0001), "Reach")
+    reach.node.use_clamp = True
+    in_shadow = math('SUBTRACT', 80, 290, 1.0, reach, "In Shadow")
+    amount = light_setting("enso_shadow_amount", -60, 250)
+    shadow_col = light_setting("enso_shadow_color", -60, 210)
+    tint = add("ShaderNodeMix", 220, 300, "Shadow Colour")
+    tint.data_type = 'RGBA'
+    tint.blend_type = 'ADD'
+    links.new(math('MULTIPLY', 80, 250, in_shadow, amount.outputs["Fac"]), tint.inputs[0])
+    links.new(diffuse, tint.inputs[6])
+    links.new(shadow_col.outputs["Color"], tint.inputs[7])
+    # Flat fill: the light's plain colour everywhere.
+    flat = light_setting("enso_flat", 220, 120)
+    fill = add("ShaderNodeMix", 380, 220, "Flat Fill")
+    fill.data_type = 'RGBA'
+    fill.clamp_factor = True
+    links.new(flat.outputs["Fac"], fill.inputs[0])
+    links.new(tint.outputs[2], fill.inputs[6])
+    links.new(info.outputs["Color"], fill.inputs[7])
+    diffuse = fill.outputs[2]
+    acc.location = (x + 560, y)
+
     links.new(diffuse, acc.inputs["Diffuse Light"])
     frame.select = True
     tree.nodes.active = acc
@@ -799,7 +940,8 @@ def _append_context_menu():
 # ---- Ensō Ink Bleed: edge data -------------------------------------------------------------
 # The Ink Bleed node paints drips measured on the object. Its data comes from a small geometry
 # nodes modifier; objects that use the node in one of their materials get it automatically.
-_INK = {"ShaderNodeEnsoInkBleed", "ShaderNodeEnsoCurvature"}
+# Ensō Curvature reads the screen since 1.1 and no longer needs the modifier.
+_INK = {"ShaderNodeEnsoInkBleed"}
 _ink_mats = {}
 
 
