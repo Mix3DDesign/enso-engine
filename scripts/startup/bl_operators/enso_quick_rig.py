@@ -24,6 +24,15 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty
 from bpy.types import Operator, Panel
 from mathutils import Quaternion, Vector
 
+def _pack():
+    """These tools belong to the Ensō NPR Pack: they stay hidden until a pack is installed."""
+    try:
+        from . import enso_dlc
+        return enso_dlc.has_pack()
+    except Exception:
+        return False
+
+
 MARKER_COLL = "Ensō Rig Markers"
 MARKERS = ("chin", "groin", "shoulder.L", "elbow.L", "wrist.L", "knee.L", "ankle.L")
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
@@ -155,6 +164,8 @@ class OBJECT_OT_enso_rig_markers(Operator):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         ob = context.active_object
         return ob is not None and ob.type == 'MESH'
 
@@ -409,6 +420,8 @@ class OBJECT_OT_enso_rig_build(Operator):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         return bpy.data.objects.get(marker_name("chin")) is not None
 
     def execute(self, context):
@@ -1060,6 +1073,8 @@ class ARMATURE_OT_enso_rig_clip(Operator):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         ob = context.active_object
         return ob is not None and ob.type == 'ARMATURE'
 
@@ -1084,6 +1099,8 @@ class ARMATURE_OT_enso_rig_rest(Operator):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         ob = context.active_object
         return ob is not None and ob.type == 'ARMATURE'
 
@@ -1101,6 +1118,10 @@ class VIEW3D_PT_enso_quick_rig(Panel):
     bl_category = "Ensō"
     bl_label = "Quick Rig"
     bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        return _pack()
 
     def draw(self, context):
         layout = self.layout
@@ -1144,6 +1165,8 @@ class VIEW3D_MT_enso_quick_rig(bpy.types.Menu):
 
 
 def _menu(self, context):
+    if not _pack():
+        return
     self.layout.separator()
     self.layout.menu("VIEW3D_MT_enso_quick_rig", icon='ARMATURE_DATA')
 

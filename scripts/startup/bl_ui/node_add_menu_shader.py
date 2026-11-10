@@ -566,6 +566,14 @@ class NODE_MT_shader_node_npr_base(node_add_menu.NodeMenu):
                                       ('CLEAN', "For Each Light: Clean Cel", "cel"),
                                       ('FACE', "For Each Light: Anime Face", "cel"),
                                       ('HAIR', "For Each Light: Anime Hair", "light")):
+                if style in {'CLEAN', 'FACE', 'HAIR'}:
+                    # One-node presets of the Ensō NPR Pack.
+                    try:
+                        from bl_operators import enso_dlc
+                        if not enso_dlc.has_pack():
+                            continue
+                    except Exception:
+                        continue
                 layout.operator("node.enso_add_for_each_light", text=text,
                                 icon_value=ic(icon)).style = style
         self.node_operator(layout, "ShaderNodeLightAccumulation", poll=eevee)

@@ -171,9 +171,9 @@ GHOST_SystemWin32::GHOST_SystemWin32() : has_performance_counter_(false), freq_(
   SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
 
   /* Set App Id for the process so our console will be grouped on the Task Bar. */
-  UTF16_ENCODE(BLENDER_WIN_APPID);
-  SetCurrentProcessExplicitAppUserModelID(BLENDER_WIN_APPID_16);
-  UTF16_UN_ENCODE(BLENDER_WIN_APPID);
+  /* Ensō: its own taskbar identity, so Windows does not group it with Blender or show
+   * Blender's icon for it. */
+  SetCurrentProcessExplicitAppUserModelID(L"Mix3DDesign.EnsoEngine");
 
   /* Check if current keyboard layout uses AltGr and save keylayout ID for
    * specialized handling if keys like VK_OEM_*. I.e. french keylayout

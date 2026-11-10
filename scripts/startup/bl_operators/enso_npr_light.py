@@ -13,6 +13,15 @@ a light without them simply behaves as before.
 import bpy
 from bpy.types import Operator, Panel
 
+def _pack():
+    """These tools belong to the Ensō NPR Pack: they stay hidden until a pack is installed."""
+    try:
+        from . import enso_dlc
+        return enso_dlc.has_pack()
+    except Exception:
+        return False
+
+
 # key: (default, min, max, subtype, label, description)
 SETTINGS = {
     "enso_flat": (0.0, 0.0, 1.0, 'FACTOR', "Flat Fill",
@@ -61,6 +70,8 @@ class LIGHT_OT_enso_npr_settings(Operator):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         return getattr(context, "light", None) is not None or (
             context.object is not None and context.object.type == 'LIGHT')
 
@@ -88,6 +99,8 @@ class DATA_PT_enso_npr_light(Panel):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         return context.light is not None and context.engine in cls.COMPAT_ENGINES
 
     def draw(self, context):

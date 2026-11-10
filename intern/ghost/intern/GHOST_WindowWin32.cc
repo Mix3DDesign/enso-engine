@@ -1242,22 +1242,29 @@ void GHOST_WindowWin32::registerWindowAppUserModelProperties()
     return;
   }
 
-  /* Set the launcher as the shell command so the console window will not flash.
-   * when people pin blender to the taskbar. */
-  strcpy(blender_app, "blender-launcher.exe");
-  wsprintfW(shell_command, L"\"%S\"", blender_path);
-  UTF16_ENCODE(BLENDER_WIN_APPID);
-  UTF16_ENCODE(BLENDER_WIN_APPID_FRIENDLY_NAME);
+  /* Ensō: the taskbar button belongs to Ensō, not to Blender. The icon is the one inside this
+   * executable, and pinning it starts EnsoEngine.exe when it is there (no console flash). */
+  wchar_t icon_resource[MAX_PATH + 8];
+  wsprintfW(icon_resource, L"%S,0", blender_path);
+  char launcher_path[MAX_PATH];
+  strcpy(launcher_path, blender_path);
+  strcpy(launcher_path + (blender_app - blender_path), "EnsoEngine.exe");
+  if (GetFileAttributesA(launcher_path) != INVALID_FILE_ATTRIBUTES) {
+    wsprintfW(shell_command, L"\"%S\"", launcher_path);
+  }
+  else {
+    wsprintfW(shell_command, L"\"%S\"", blender_path);
+  }
   PROPVARIANT propvar;
-  hr = InitPropVariantFromString(BLENDER_WIN_APPID_16, &propvar);
+  hr = InitPropVariantFromString(L"Mix3DDesign.EnsoEngine", &propvar);
   hr = pstore->SetValue(PKEY_AppUserModel_ID, propvar);
   hr = InitPropVariantFromString(shell_command, &propvar);
   hr = pstore->SetValue(PKEY_AppUserModel_RelaunchCommand, propvar);
-  hr = InitPropVariantFromString(BLENDER_WIN_APPID_FRIENDLY_NAME_16, &propvar);
+  hr = InitPropVariantFromString(L"Enso Engine", &propvar);
   hr = pstore->SetValue(PKEY_AppUserModel_RelaunchDisplayNameResource, propvar);
+  hr = InitPropVariantFromString(icon_resource, &propvar);
+  hr = pstore->SetValue(PKEY_AppUserModel_RelaunchIconResource, propvar);
   pstore->Release();
-  UTF16_UN_ENCODE(BLENDER_WIN_APPID_FRIENDLY_NAME);
-  UTF16_UN_ENCODE(BLENDER_WIN_APPID);
 }
 
 /* as per MSDN: Any property not cleared before closing the window, will be leaked and NOT be

@@ -100,6 +100,25 @@ def active_packs():
     return out
 
 
+_has_pack = None
+
+
+def has_pack():
+    """True when an Ensō pack is installed and unlocked. The pack tools that live in the engine
+    (one-node light presets, NPR light settings, Quick Rig, On Twos, scene effects) show only then."""
+    global _has_pack
+    if _has_pack is None:
+        try:
+            _has_pack = bool(active_packs())
+        except Exception:
+            _has_pack = False
+    return _has_pack
+
+
+PACK_STYLES = {'CLEAN', 'FACE', 'HAIR'}
+NEEDS_PACK = "This is part of the Ensō NPR Pack"
+
+
 def sync_asset_libraries():
     """Make sure every active pack is an asset library, and drop libraries of removed or
     unlicensed packs."""
@@ -108,6 +127,14 @@ def sync_asset_libraries():
     wanted = {}
     for pack_dir, manifest in active_packs():
         wanted[LIB_PREFIX + manifest.get("name", manifest["id"])] = os.path.join(pack_dir, "library")
+    # Pack content that ships inside the engine (the scene effects) is its own library, added
+    # only while a pack is active.
+    try:
+        extra = os.path.join(bpy.utils.system_resource('DATAFILES'), "enso_pack")
+        if wanted and os.path.isdir(extra):
+            wanted[LIB_PREFIX + "Ensō Effects"] = extra
+    except Exception:
+        pass
     for lib in list(libs):
         if lib.name.startswith(LIB_PREFIX) and lib.name not in wanted:
             libs.remove(lib)
@@ -339,6 +366,8 @@ def _enso_lights_timer():
 
 
 def refresh_packs(reload=False):
+    global _has_pack
+    _has_pack = None
     try:
         sync_asset_libraries()
         enable_pack_addons(reload=reload)
@@ -636,6 +665,9 @@ light (EEVEE) and adds the results, so every light gets its own cel shading in i
                 and space.edit_tree.bl_idname == 'ShaderNodeTree')
 
     def execute(self, context):
+        if self.style in PACK_STYLES and not has_pack():
+            self.report({'ERROR'}, NEEDS_PACK)
+            return {'CANCELLED'}
         tree = context.space_data.edit_tree
         for n in tree.nodes:
             n.select = False

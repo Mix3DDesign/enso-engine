@@ -14,6 +14,15 @@ import bpy
 from bpy.props import BoolProperty, IntProperty
 from bpy.types import Operator, Panel
 
+def _pack():
+    """These tools belong to the Ensō NPR Pack: they stay hidden until a pack is installed."""
+    try:
+        from . import enso_dlc
+        return enso_dlc.has_pack()
+    except Exception:
+        return False
+
+
 PROP = "enso_on_twos"
 
 
@@ -135,6 +144,8 @@ class ANIM_OT_enso_on_twos(Operator):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         return context.active_object is not None or context.selected_objects
 
     def execute(self, context):
@@ -158,6 +169,8 @@ class ANIM_OT_enso_on_twos_clear(Operator):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         return context.active_object is not None or context.selected_objects
 
     def execute(self, context):
@@ -190,6 +203,8 @@ class OBJECT_PT_enso_on_twos(Panel):
 
     @classmethod
     def poll(cls, context):
+        if not _pack():
+            return False
         return context.object is not None
 
     def draw(self, context):
@@ -210,6 +225,8 @@ class OBJECT_PT_enso_on_twos(Panel):
 
 
 def _menu(self, context):
+    if not _pack():
+        return
     self.layout.separator()
     self.layout.operator("anim.enso_on_twos", icon='KEYTYPE_BREAKDOWN_VEC')
     self.layout.operator("anim.enso_on_twos_clear")
