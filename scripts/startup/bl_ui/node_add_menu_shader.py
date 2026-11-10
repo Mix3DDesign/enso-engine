@@ -608,6 +608,7 @@ class NODE_MT_shader_node_npr_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ShaderNodeEnsoInkBleed", poll=eevee, icon_value=ic("leak"))
         self.node_operator(layout, "ShaderNodeEnsoCurvature", poll=eevee, icon_value=ic("curvature"))
         self.node_operator(layout, "ShaderNodeEnsoBrushNormals", poll=eevee, icon_value=ic("brush"))
+        self.node_operator(layout, "ShaderNodeEnsoPainterlyNormals", poll=eevee, icon_value=ic("brush"))
         self.node_operator(layout, "ShaderNodeEnsoLineDetect", poll=eevee, icon_value=ic("line"))
         self.node_operator(layout, "ShaderNodeEnsoScreenRim", poll=eevee, icon_value=ic("light"))
         self.node_operator(layout, "ShaderNodeEnsoHatching", poll=eevee, icon_value=ic("shadow"))

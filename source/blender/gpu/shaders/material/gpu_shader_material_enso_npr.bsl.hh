@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "gpu_shader_codegen_lib.glsl"
 #include "gpu_shader_material_interface.bsl.hh"
 
 /* Pixel position of a world point. */
@@ -495,32 +496,18 @@ void node_enso_reflection(float3 N,
 /* ------------------------------------------------------------------------------------------ */
 /* Ensō Blur */
 
-/* Blur for anything that is looked up by coordinates. Each render sample moves the coordinates
- * to another point of a small disc, and the samples add up to a real blur of whatever texture,
- * colour, value or vector is read with them. */
+/* Blur of anything: the nodes plugged into Value are evaluated 16 times with their texture
+ * coordinates moved over a disc of pixels (enso_blur_branch in the codegen library), and this
+ * node returns the average. The setup node runs first and gives the disc its size. */
 [[node]]
-void node_enso_blur(float3 co,
-                    float radius,
-                    [[resource_table]] KernelGlobals &kg,
-                    const ShadingData &sd,
-                    float3 &out_co)
+void node_enso_blur_setup(float radius, float &ready)
 {
-  out_co = co;
-#if defined(GPU_FRAGMENT_SHADER) || defined(GLSL_CPP_STUBS)
-  float jit;
-  enso_pixel_jitter(kg, sd.frag_co.xy, jit);
-  float a = jit * 6.2831853f;
-  float r = sqrt(fract(jit * 7.31f + 0.137f)) * max(radius, 0.0f);
-  /* Spread in the plane of the coordinates that changes across the surface. */
-  float3 dx = gpu_dfdx(co);
-  float3 dy = gpu_dfdy(co);
-  float lx = length(dx);
-  float ly = length(dy);
-  float3 ax = (lx > 1e-8f) ? dx / lx : float3(1.0f, 0.0f, 0.0f);
-  float3 ay = (ly > 1e-8f) ? dy / ly : float3(0.0f, 1.0f, 0.0f);
-  ay = ay - ax * dot(ay, ax);
-  float la = length(ay);
-  ay = (la > 1e-6f) ? ay / la : float3(0.0f, 1.0f, 0.0f);
-  out_co = co + (ax * cos(a) + ay * sin(a)) * r;
-#endif
+  g_enso_blur_radius = clamp(radius, 0.0f, 64.0f);
+  ready = 1.0f;
+}
+
+[[node]]
+void node_enso_blur(float /*ready*/, float4 blurred, float4 &result)
+{
+  result = blurred;
 }

@@ -271,6 +271,13 @@ static void gpu_node_input_link(GPUNode *node, GPUNodeLink *link, const GPUType 
                link->differentiate_float.function_name,
                link->differentiate_float.filter_width);
       break;
+    case GPU_NODE_LINK_ENSO_BLUR_FN:
+      input->source = GPU_SOURCE_FUNCTION_CALL;
+      /* The end of the call is the return variable, set during codegen. */
+      SNPRINTF(input->function_call,
+               "enso_blur_branch(%s(kg, sd), ",
+               link->differentiate_float.function_name);
+      break;
     default:
       break;
   }
@@ -886,6 +893,15 @@ GPUNodeLink *GPU_differentiate_float_function(const char *function_name, const f
   link->link_type = GPU_NODE_LINK_DIFFERENTIATE_FLOAT_FN;
   link->differentiate_float.function_name = function_name;
   link->differentiate_float.filter_width = filter_width;
+  return link;
+}
+
+GPUNodeLink *GPU_enso_blur_function(const char *function_name)
+{
+  GPUNodeLink *link = gpu_node_link_create();
+  link->link_type = GPU_NODE_LINK_ENSO_BLUR_FN;
+  link->differentiate_float.function_name = function_name;
+  link->differentiate_float.filter_width = 0.0f;
   return link;
 }
 

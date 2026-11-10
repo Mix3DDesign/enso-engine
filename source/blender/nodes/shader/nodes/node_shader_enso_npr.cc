@@ -359,29 +359,39 @@ namespace nodes::node_shader_enso_blur_cc {
 
 static void node_declare(NodeDeclarationBuilder &b)
 {
-  b.add_input<decl::Vector>("Vector"_ustr)
+  b.add_input<decl::Color>("Value"_ustr)
+      .default_value({0.0f, 0.0f, 0.0f, 1.0f})
       .hide_value()
-      .description("The coordinates to blur with. Unconnected, the active UV map is used");
+      .description("Anything to blur: a colour, a value or a vector from any textures and nodes");
   b.add_input<decl::Float>("Radius"_ustr)
-      .default_value(0.02f)
+      .default_value(8.0f)
       .min(0.0f)
-      .max(10.0f)
-      .description("Blur size, in the units of the coordinates (0.02 is 2% of a UV tile)");
-  b.add_output<decl::Vector>("Vector"_ustr)
-      .description("Plug this into the Vector input of any texture or mapping to blur it");
+      .max(64.0f)
+      .description("Blur size in screen pixels");
+  b.add_output<decl::Color>("Value"_ustr)
+      .description("The blurred result. Plug it into a colour, value or vector input");
 }
 
 static int node_gpu(GPUMaterial *mat,
-                    bNode *node,
+                    bNode * /*node*/,
                     bNodeExecData * /*execdata*/,
                     GPUNodeStack *in,
                     GPUNodeStack *out)
 {
   if (!in[0].link) {
-    GPU_link(mat, "node_enso_attribute_uv", GPU_attribute(mat, CD_AUTO_FROM_NAME, ""), &in[0].link);
+    static float nothing[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    return GPU_link(mat, "set_rgba", GPU_constant(nothing), &out[0].link);
   }
-  return GPU_stack_link(
-      mat, node, "node_enso_blur", in, out, GPU_kernel_globals(), GPU_shading_data());
+  /* Everything plugged into Value becomes a function, so it can be evaluated again around the
+   * pixel. Its textures read their coordinates moved by a few pixels each time. */
+  const char *value_function = GPU_material_split_sub_function(mat, GPU_VEC4, &in[0].link);
+  GPUNodeLink *ready = nullptr;
+  GPU_link(mat,
+           "node_enso_blur_setup",
+           in[1].link ? in[1].link : GPU_uniform(in[1]),
+           &ready);
+  return GPU_link(
+      mat, "node_enso_blur", ready, GPU_enso_blur_function(value_function), &out[0].link);
 }
 
 }  // namespace nodes::node_shader_enso_blur_cc
@@ -393,9 +403,9 @@ void register_node_type_sh_enso_blur()
   sh_node_type_base(&ntype, "ShaderNodeEnsoBlur"_ustr);
   ntype.ui_name = "Ensō Blur";
   ntype.ui_description =
-      "Blurs any texture, colour, value or vector that is read with coordinates: plug its Vector "
-      "into the texture. The blur builds up over the render samples (EEVEE)";
-  ntype.nclass = NODE_CLASS_OP_VECTOR;
+      "Blurs whatever is plugged into it, like a blur filter: textures, colours, values and "
+      "vectors. The size is in screen pixels (EEVEE)";
+  ntype.nclass = NODE_CLASS_OP_COLOR;
   ntype.declare = file_ns::node_declare;
   ntype.gpu_fn = file_ns::node_gpu;
   ntype.default_width = 150.0f;

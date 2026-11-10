@@ -70,6 +70,7 @@ void register_node_type_sh_enso_screen_curvature();
 void register_node_type_sh_enso_reflection();
 void register_node_type_sh_enso_blur();
 void register_node_type_sh_enso_brush_normals();
+void register_node_type_sh_enso_painterly_normals();
 void register_node_type_sh_fresnel();
 void register_node_type_sh_gamma();
 void register_node_type_sh_geometry();

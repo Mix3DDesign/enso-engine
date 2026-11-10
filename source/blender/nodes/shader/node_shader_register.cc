@@ -53,6 +53,7 @@ void register_shader_nodes()
   register_node_type_sh_enso_ink_bleed();
   register_node_type_sh_enso_curvature();
   register_node_type_sh_enso_brush_normals();
+  register_node_type_sh_enso_painterly_normals();
   register_node_type_sh_enso_screen_rim();
   register_node_type_sh_enso_line_detect();
   register_node_type_sh_enso_hatching();

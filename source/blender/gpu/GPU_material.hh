@@ -669,6 +669,11 @@ GPUNodeLink *GPU_color_band(GPUMaterial *mat, int size, float *pixels, float *r_
  * The result will be a vec2 containing dFdx and dFdy result of that function.
  */
 GPUNodeLink *GPU_differentiate_float_function(const char *function_name, const float filter_width);
+/**
+ * Evaluate a sub function (see #GPU_material_split_sub_function, float4 return) several times
+ * with its texture coordinates moved over a disc of pixels, and return the average.
+ */
+GPUNodeLink *GPU_enso_blur_function(const char *function_name);
 
 bool GPU_link(GPUMaterial *mat, const char *name, ...);
 bool GPU_stack_link(GPUMaterial *mat,

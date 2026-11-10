@@ -3148,6 +3148,14 @@ void DepsgraphRelationBuilder::build_nodetree(bNodeTree *ntree)
         ComponentKey object_geometry_key(id, NodeType::GEOMETRY);
         add_relation(object_geometry_key, ntree_output_key, "Object Geometry -> Node");
       }
+      /* A light picked in a node: its colour, power and type are read by the node, so the
+       * tree has to follow the light's settings as well as its transform. */
+      Object *node_object = id_cast<Object *>(id);
+      if (node_object->type == OB_LAMP && node_object->data != nullptr) {
+        ComponentKey light_parameters_key(static_cast<ID *>(node_object->data),
+                                          NodeType::PARAMETERS);
+        add_relation(light_parameters_key, ntree_output_key, "Light Settings -> Node");
+      }
     }
     else if (id_type == ID_SCE) {
       Scene *node_scene = id_cast<Scene *>(id);

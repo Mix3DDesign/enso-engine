@@ -680,7 +680,7 @@ light (EEVEE) and adds the results, so every light gets its own cel shading in i
     )
     single_node: BoolProperty(
         name="Single Node",
-        description="Wrap the setup in one node with a Base Color input. Press Tab on it to open "
+        description="Wrap the setup in one node with colour, shadow and band settings. Press Tab on it to open "
                     "and change the nodes inside. Turn off to get the loose nodes in a frame",
         default=True,
     )
@@ -724,7 +724,8 @@ def build_for_each_light_group(tree, style='CEL', location=(0.0, 0.0), label="Ce
     hi = group.interface.new_socket("Highlight Color", in_out='INPUT', socket_type='NodeSocketColor')
     hi.default_value = (1.0, 1.0, 1.0, 1.0)
     hi.description = "Colour of highlights, for the styles that have them"
-    acc = build_for_each_light(group, style, (0.0, 0.0), label)
+    controls = {}
+    acc = build_for_each_light(group, style, (0.0, 0.0), label, controls)
     gin = group.nodes.new("NodeGroupInput")
     gin.location = (acc.location.x - 220.0, acc.location.y - 260.0)
     gout = group.nodes.new("NodeGroupOutput")
@@ -744,6 +745,38 @@ def build_for_each_light_group(tree, style='CEL', location=(0.0, 0.0), label="Ce
         group.links.new(gin.outputs["Base Color"], acc.inputs["Diffuse Color"])
     group.links.new(gin.outputs["Highlight Color"], acc.inputs["Glossy Color"])
     group.links.new(acc.outputs[0], gout.inputs[0])
+    # More settings on the node, for the styles that have them.
+    extra = (
+        ("Shadow Color", 'NodeSocketColor', None, None, None,
+         "Colour left in the shadows in place of black. It is multiplied by the base colour"),
+        ("Cel", 'NodeSocketFloat', 0.0, 1.0, 'FACTOR',
+         "1 is cel shading with hard bands, 0 is plain smooth light"),
+        ("Bands", 'NodeSocketFloat', 1.0, 8.0, None,
+         "Number of shadow steps: 1 is light and shadow, 2 adds a half tone"),
+        ("Shadow Size", 'NodeSocketFloat', -1.0, 2.0, None,
+         "Where the shadow starts. Higher makes the shadow bigger"),
+        ("Band Spread", 'NodeSocketFloat', 0.0, 2.0, None,
+         "Distance between the steps when there is more than one band"),
+        ("Softness", 'NodeSocketFloat', 0.0, 1.0, 'FACTOR',
+         "Painted softness of each step. 0 is a hard anime edge"),
+        ("Highlight Size", 'NodeSocketFloat', 0.0, 1.0, 'FACTOR', "Size of the toon highlight"),
+        ("Rim Width", 'NodeSocketFloat', 0.0, 1.0, 'FACTOR', "Width of the rim of light"),
+    )
+    for name, kind, lo, hi_, subtype, tip in extra:
+        target = controls.get(name)
+        if target is None:
+            continue
+        sock = group.interface.new_socket(name, in_out='INPUT', socket_type=kind)
+        sock.description = tip
+        if kind == 'NodeSocketColor':
+            sock.default_value = (0.0, 0.0, 0.0, 1.0)
+        else:
+            if subtype:
+                sock.subtype = subtype
+            sock.min_value = lo
+            sock.max_value = hi_
+            sock.default_value = target.default_value
+        group.links.new(gin.outputs[name], target)
     for n in group.nodes:
         n.select = False
     node = tree.nodes.new("ShaderNodeGroup")
@@ -754,9 +787,13 @@ def build_for_each_light_group(tree, style='CEL', location=(0.0, 0.0), label="Ce
     return node
 
 
-def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
-    """Build a For Each Light node setup in a shader node tree (used by the operator)."""
+def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel", controls=None):
+    """Build a For Each Light node setup in a shader node tree (used by the operator).
+
+    `controls`, when given, is filled with the input sockets worth showing on the single node
+    (name -> socket), so the group builder can wire them to group inputs."""
     x, y = location
+    ctl = controls if controls is not None else {}
     nodes, links = tree.nodes, tree.links
     frame = nodes.new("NodeFrame")
     frame.label = "For Each Light"
@@ -828,6 +865,20 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
     lit = math('MULTIPLY', -880, -60, ev.outputs["Factor"], info.outputs["Power"], "Light Amount")
     gray = (0.25, 0.25, 0.25, 1.0)
     diffuse = None
+    cel = None
+
+    def cel_or_smooth(cel_node, dx, dy):
+        """Cel on/off: 1 uses the bands, 0 the plain smooth light, between is a blend."""
+        smooth = math('MINIMUM', dx, dy - 120, lit, 1.0, "Smooth Light")
+        smooth.node.use_clamp = True
+        m = add("ShaderNodeMix", dx, dy, "Cel")
+        m.data_type = 'FLOAT'
+        m.clamp_factor = True
+        m.inputs[0].default_value = 1.0
+        links.new(smooth, m.inputs[2])
+        links.new(cel_node.outputs["Shade"], m.inputs[3])
+        ctl["Cel"] = m.inputs[0]
+        return m.outputs[0]
 
     if style == 'SOFT':
         lit = math('MULTIPLY', -700, -160, lit, ev.outputs["Mask"], "Spot Cutoff")
@@ -862,6 +913,7 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
             links.new(ev.outputs["Mask"], cast.inputs[3])
             shade = math('MULTIPLY', -560, -60, face.outputs["Shade"], cast.outputs[0], "Face Shade")
             nodes.remove(cel)
+            cel = None
             nodes.remove(lit.node)
             lit_col = mul_color(info.outputs["Color"], shade, -150, 60, "Light Color")
             diffuse = lit_col
@@ -874,7 +926,8 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
             links.new(lit, cel.inputs["Value"])
             if style == 'CLEAN':
                 cel.inputs["Bands"].default_value = 2.0
-            diffuse = mul_color(info.outputs["Color"], cel.outputs["Shade"], -150, 60, "Light Color")
+            shade = cel_or_smooth(cel, -360, -60)
+            diffuse = mul_color(info.outputs["Color"], shade, -150, 60, "Light Color")
             if style == 'HAIR':
                 # The ring: hair flows down from the top of the head; the node splits it into
                 # locks so the ring zigzags. Plug a texture in Strands to draw your own.
@@ -882,7 +935,7 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
                 ring.inputs["Position"].default_value = 0.65
                 links.new(ev.outputs["Direction"], ring.inputs["Light Direction"])
                 # Only where the light reaches.
-                on = math('MULTIPLY', -700, -380, ring.outputs["Ring"], cel.outputs["Shade"], "Ring In Light")
+                on = math('MULTIPLY', -700, -380, ring.outputs["Ring"], shade, "Ring In Light")
                 glossy = mul_color(info.outputs["Color"], on, -150, -300, "Ring Color")
                 links.new(glossy, acc.inputs["Glossy Light"])
     elif style == 'HALFTONE':
@@ -904,22 +957,30 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
                     "Halftone")
         diffuse = mul_color(info.outputs["Color"], dots, -150, 60, "Light Color")
     else:
-        bands = ramp(lit, -620, -60, ((0.0, (0, 0, 0)), (0.2, (0.35, 0.35, 0.35)), (0.45, (1, 1, 1))),
-                     'CONSTANT', "Cel Bands")
+        cel = add("ShaderNodeEnsoCelBands", -620, -60)
+        cel.inputs["Bands"].default_value = 2.0
+        cel.inputs["Threshold"].default_value = 0.325
+        cel.inputs["Spread"].default_value = 0.25
+        links.new(lit, cel.inputs["Value"])
+        bands = cel_or_smooth(cel, -360, -60)
         diffuse = mul_color(info.outputs["Color"], bands, -150, 60, "Light Color")
         if style == 'CEL_SPEC':
             gev = add("ShaderNodeLightEvaluation", -1100, -380, "Highlight")
             gev.mode = 'GLOSSY'
             gev.inputs["Roughness"].default_value = 0.2
             spec = math('MULTIPLY', -880, -380, gev.outputs["Factor"], info.outputs["Power"])
-            hl = ramp(spec, -620, -380, ((0.0, (0, 0, 0)), (0.2, (1, 1, 1))), 'CONSTANT', "Highlight Size")
+            # A smaller number makes a bigger highlight.
+            size = math('SUBTRACT', -760, -460, 1.0, 0.8, "Highlight Size")
+            ctl["Highlight Size"] = size.node.inputs[1]
+            hl = math('GREATER_THAN', -620, -380, spec, size, "Highlight")
             glossy = mul_color(info.outputs["Color"], hl, -150, -300, "Highlight Color")
             links.new(glossy, acc.inputs["Glossy Light"])
         elif style == 'CEL_RIM':
             lw = add("ShaderNodeLayerWeight", -1100, -380)
             lw.inputs["Blend"].default_value = 0.35
-            rim_edge = ramp(lw.outputs["Facing"], -880, -380, ((0.0, (0, 0, 0)), (0.65, (1, 1, 1))),
-                            'CONSTANT', "Rim Width")
+            width = math('SUBTRACT', -1020, -460, 1.0, 0.35, "Rim Width")
+            ctl["Rim Width"] = width.node.inputs[1]
+            rim_edge = math('GREATER_THAN', -880, -380, lw.outputs["Facing"], width, "Rim Edge")
             # Only on the side the light reaches, so each light draws its own rim.
             rim = mul_color(rim_edge, bands, -620, -300, "Rim On Lit Side")
             rim = mul_color(rim, info.outputs["Color"], -400, -300, "Rim Color")
@@ -933,12 +994,20 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
         a.hide = True
         return a
 
-    if style in {'CLEAN', 'HAIR'}:
+    if cel is not None:
+        # The node's own values plus what the light adds.
         soft = light_setting("enso_soft", -820, 330)
         shift = light_setting("enso_shift", -820, 290)
-        links.new(soft.outputs["Fac"], cel.inputs["Softness"])
-        links.new(math('ADD', -700, 290, cel.inputs["Threshold"].default_value, shift.outputs["Fac"],
-                       "Band Shift"), cel.inputs["Threshold"])
+        soft_sum = math('ADD', -700, 330, cel.inputs["Softness"].default_value, soft.outputs["Fac"],
+                        "Softness")
+        pos_sum = math('ADD', -700, 290, cel.inputs["Threshold"].default_value, shift.outputs["Fac"],
+                       "Shadow Size")
+        links.new(soft_sum, cel.inputs["Softness"])
+        links.new(pos_sum, cel.inputs["Threshold"])
+        ctl["Bands"] = cel.inputs["Bands"]
+        ctl["Shadow Size"] = pos_sum.node.inputs[0]
+        ctl["Band Spread"] = cel.inputs["Spread"]
+        ctl["Softness"] = soft_sum.node.inputs[0]
     # Coloured shadows: the part of the surface this light does not reach gets its shadow colour.
     def gray_of(col, dx, dy):
         bw = add("ShaderNodeRGBToBW", dx, dy)
@@ -958,16 +1027,26 @@ def build_for_each_light(tree, style='CEL', location=(0.0, 0.0), label="Cel"):
     links.new(math('MULTIPLY', 80, 250, in_shadow, amount.outputs["Fac"]), tint.inputs[0])
     links.new(diffuse, tint.inputs[6])
     links.new(shadow_col.outputs["Color"], tint.inputs[7])
+    # The material's own shadow colour: what each light leaves in the part it does not reach,
+    # in place of black. It is multiplied by the base colour like the light is.
+    mat_shadow = mul_color((0.0, 0.0, 0.0, 1.0), info.outputs["Color"], 220, 420, "Shadow Color")
+    ctl["Shadow Color"] = mat_shadow.node.inputs[6]
+    tint2 = add("ShaderNodeMix", 380, 380, "Add Shadow Color")
+    tint2.data_type = 'RGBA'
+    tint2.blend_type = 'ADD'
+    links.new(in_shadow, tint2.inputs[0])
+    links.new(tint.outputs[2], tint2.inputs[6])
+    links.new(mat_shadow, tint2.inputs[7])
     # Flat fill: the light's plain colour everywhere.
     flat = light_setting("enso_flat", 220, 120)
-    fill = add("ShaderNodeMix", 380, 220, "Flat Fill")
+    fill = add("ShaderNodeMix", 540, 220, "Flat Fill")
     fill.data_type = 'RGBA'
     fill.clamp_factor = True
     links.new(flat.outputs["Fac"], fill.inputs[0])
-    links.new(tint.outputs[2], fill.inputs[6])
+    links.new(tint2.outputs[2], fill.inputs[6])
     links.new(info.outputs["Color"], fill.inputs[7])
     diffuse = fill.outputs[2]
-    acc.location = (x + 560, y)
+    acc.location = (x + 740, y)
 
     links.new(diffuse, acc.inputs["Diffuse Light"])
     frame.select = True

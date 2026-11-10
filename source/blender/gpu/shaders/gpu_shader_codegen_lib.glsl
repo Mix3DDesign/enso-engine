@@ -255,6 +255,10 @@ ClosureThinRefraction to_closure_thin_refraction(ClosureUndetermined cl)
 float g_derivative_filter_width = 0.0f;
 /* Precise derivatives */
 int g_derivative_flag = 0;
+/* Blur node: offset of the coordinates in pixels (used when g_derivative_flag is 2), and the
+ * radius of the disc in pixels. */
+float2 g_enso_blur_offset = float2(0.0f);
+float g_enso_blur_radius = 0.0f;
 
 float3 dF_impl([[maybe_unused]] float3 v)
 {
@@ -263,6 +267,9 @@ float3 dF_impl([[maybe_unused]] float3 v)
 #elif defined(GPU_FAST_DERIVATIVE) /* TODO(@fclem): User Option? */
   return float3(0.0f);
 #else
+  if (g_derivative_flag == 2) {
+    return gpu_dfdx(v) * g_enso_blur_offset.x + gpu_dfdy(v) * g_enso_blur_offset.y;
+  }
   if (g_derivative_flag > 0) {
     return gpu_dfdx(v) * g_derivative_filter_width;
   }
@@ -309,6 +316,25 @@ void dF_branch_incomplete([[maybe_unused]] float fn,
       result -= float2((fn)); \
     }
 
+/* Average of `fn` (float4) over a disc of pixels: 16 points on a spiral, soft falloff. */
+#  define enso_blur_branch(fn, result) \
+    if (true) { \
+      int enso_prev_flag = g_derivative_flag; \
+      float4 enso_acc = float4(0.0f); \
+      float enso_wsum = 0.0f; \
+      for (int enso_i = 0; enso_i < 16; enso_i++) { \
+        float enso_r = sqrt((float(enso_i) + 0.5f) / 16.0f); \
+        float enso_a = float(enso_i) * 2.39996323f; \
+        float enso_w = exp(-2.0f * enso_r * enso_r); \
+        g_enso_blur_offset = float2(cos(enso_a), sin(enso_a)) * (enso_r * g_enso_blur_radius); \
+        g_derivative_flag = 2; \
+        enso_acc += (fn) * enso_w; \
+        enso_wsum += enso_w; \
+      } \
+      g_derivative_flag = enso_prev_flag; \
+      result = enso_acc / enso_wsum; \
+    }
+
 /* Used when the non-offset value is already computed elsewhere */
 #  define dF_branch_incomplete(fn, filter_width, result) \
     if (true) { \
@@ -319,4 +345,6 @@ void dF_branch_incomplete([[maybe_unused]] float fn,
       result.y = (fn); \
       g_derivative_flag = 0; \
     }
+#else
+#  define enso_blur_branch(fn, result) result = (fn);
 #endif

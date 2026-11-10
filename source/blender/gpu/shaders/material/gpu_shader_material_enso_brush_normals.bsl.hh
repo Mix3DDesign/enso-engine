@@ -15,6 +15,7 @@
 
 #include "gpu_shader_common_hash.bsl.hh"
 #include "gpu_shader_material_interface.bsl.hh"
+#include "gpu_shader_material_noise.bsl.hh"
 
 float3 enso_brush_normalize(float3 v)
 {
@@ -40,7 +41,10 @@ float enso_brush_height(float3 q, const EnsoBrushParams &bp, float &stroke_id)
 {
   float3 n = bp.n;
   float3 cell = floor(q);
-  float best = 0.0f;
+  /* Strokes are layered like wet paint: a later stroke covers the earlier ones, and its edge
+   * fades into what is under it, so the paint height has no steps. */
+  float height_sum = 0.0f;
+  float weight_sum = 0.0f;
   float best_order = -1.0f;
   stroke_id = 0.0f;
   float3 fl = bp.flow - n * dot(bp.flow, n);
@@ -79,19 +83,20 @@ float enso_brush_height(float3 q, const EnsoBrushParams &bp, float &stroke_id)
           float load = mix(0.55f, 1.0f, t);
           hgt = edge * mix(1.0f, bristle, 0.45f) * load;
         }
-        if (hgt <= 0.04f) {
+        if (hgt <= 0.0f) {
           continue;
         }
-        float order = h.z;
+        float order = smoothstep(0.0f, 0.3f, hgt) * exp(6.0f * h.z);
+        height_sum += order * hgt;
+        weight_sum += order;
         if (order > best_order) {
           best_order = order;
-          best = hgt;
           stroke_id = fract(h.x * 7.13f + h.y * 3.71f);
         }
       }
     }
   }
-  return best;
+  return height_sum / (weight_sum + 0.15f);
 }
 
 /* Same, with brush stamps from the atlas image. */
@@ -102,7 +107,10 @@ float enso_brush_height_image(float3 q,
 {
   float3 n = bp.n;
   float3 cell = floor(q);
-  float best = 0.0f;
+  /* Strokes are layered like wet paint: a later stroke covers the earlier ones, and its edge
+   * fades into what is under it, so the paint height has no steps. */
+  float height_sum = 0.0f;
+  float weight_sum = 0.0f;
   float best_order = -1.0f;
   stroke_id = 0.0f;
   float3 fl = bp.flow - n * dot(bp.flow, n);
@@ -145,20 +153,24 @@ float enso_brush_height_image(float3 q,
           float2 uv = (float2(tx, ty) + float2(u, w)) / float2(cols, max(floor(bp.rows), 1.0f));
           float4 s = textureLod(ima, uv, bp.lod);
           hgt = max(max(s.r, s.g), s.b) * s.a;
+          /* A stamp that is not black at its border would end in a straight line. */
+          float2 border = min(float2(u, w), float2(1.0f) - float2(u, w));
+          hgt *= smoothstep(0.0f, 0.1f, min(border.x, border.y));
         }
-        if (hgt <= 0.04f) {
+        if (hgt <= 0.0f) {
           continue;
         }
-        float order = h.z;
+        float order = smoothstep(0.0f, 0.3f, hgt) * exp(6.0f * h.z);
+        height_sum += order * hgt;
+        weight_sum += order;
         if (order > best_order) {
           best_order = order;
-          best = hgt;
           stroke_id = fract(h.x * 7.13f + h.y * 3.71f);
         }
       }
     }
   }
-  return best;
+  return height_sum / (weight_sum + 0.15f);
 }
 
 /* Stroke parameters in object space. */
@@ -299,4 +311,67 @@ void node_enso_brush_normals_image(float scale,
   hy = enso_brush_height_image((Po + dPoy) * s, bp, ima, t);
 #endif
   normal = enso_brush_bump(sd, N, s, strength, height, hx, hy);
+}
+
+/* Ensō Painterly Normals: the procedural version, no image needed. The normal is snapped to the
+ * centre of a Voronoi cell laid out in normal space, and the cells are pushed around by noise
+ * that follows the surface. Every cell becomes one flat dab of paint, so the light breaks into
+ * brush shaped patches the way a painter blocks in a form. */
+[[node]]
+void node_enso_painterly_normals(float scale,
+                                 float distortion,
+                                 float noise_scale,
+                                 float smoothness,
+                                 float strength,
+                                 float randomness,
+                                 float seed,
+                                 float3 N,
+                                 [[resource_table]] KernelGlobals &kg,
+                                 const ShadingData &sd,
+                                 float3 &normal,
+                                 float &dab)
+{
+  N = normalize(N);
+  ObjectMatrices obm = kg.object_matrices_get(sd);
+  float3 Po = (obm.model_inverse * float4(sd.P, 1.0f)).xyz;
+  float3 No = enso_brush_normalize((float4(N, 0.0f) * obm.model).xyz);
+  float3 np = Po * noise_scale + float3(seed * 13.7f, seed * 5.1f, seed * 9.3f);
+  float3 warp = float3(snoise(np),
+                       snoise(np + float3(31.4f, 17.7f, 5.3f)),
+                       snoise(np + float3(-11.2f, 43.1f, 27.9f))) *
+                distortion;
+  float s = max(scale, 0.01f);
+  float3 q = (No + warp) * s;
+  float3 cell = floor(q);
+  /* Hard cells at 0, cells that melt into each other at 1. */
+  float sharp = mix(60.0f, 3.0f, saturate(smoothness));
+  float3 acc = float3(0.0f);
+  float weight_sum = 0.0f;
+  float nearest = 1e9f;
+  dab = 0.0f;
+  for (int z = -1; z <= 1; z++) {
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        float3 c = cell + float3(float(x), float(y), float(z));
+        float3 h = hash_vec3_to_vec3(c + float3(seed, seed * 1.7f, seed * 2.3f));
+        float3 center = c + mix(float3(0.5f), h, saturate(randomness));
+        float3 v = q - center;
+        float d2 = dot(v, v);
+        float w = exp(-d2 * sharp);
+        acc += center * w;
+        weight_sum += w;
+        if (d2 < nearest) {
+          nearest = d2;
+          dab = h.x;
+        }
+      }
+    }
+  }
+  float3 pn = acc / max(weight_sum, 1e-30f);
+  pn = (dot(pn, pn) > 1e-6f) ? normalize(pn) : No;
+  /* Object to world for normals: transposed inverse model matrix. */
+  float3 Nw = (float4(pn, 0.0f) * obm.model_inverse).xyz;
+  Nw = (dot(Nw, Nw) > 1e-12f) ? normalize(Nw) : N;
+  float3 mixed = mix(N, Nw, saturate(strength));
+  normal = (dot(mixed, mixed) > 1e-8f) ? normalize(mixed) : N;
 }

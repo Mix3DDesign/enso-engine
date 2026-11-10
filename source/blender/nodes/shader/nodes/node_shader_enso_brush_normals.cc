@@ -124,4 +124,83 @@ void register_node_type_sh_enso_brush_normals()
   bke::node_register_type(ntype);
 }
 
+/* -------------------------------------------------------------------- Ensō Painterly Normals */
+namespace nodes::node_shader_enso_painterly_normals_cc {
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Float>("Scale"_ustr)
+      .default_value(5.0f)
+      .min(0.1f)
+      .max(100.0f)
+      .description("Number of paint dabs around the form. Lower makes bigger dabs");
+  b.add_input<decl::Float>("Distortion"_ustr)
+      .default_value(0.35f)
+      .min(0.0f)
+      .max(4.0f)
+      .description("How much noise pushes the dabs around, which gives them a brushed outline");
+  b.add_input<decl::Float>("Noise Scale"_ustr)
+      .default_value(3.0f)
+      .min(0.0f)
+      .max(1000.0f)
+      .description("Size of the noise on the object. Higher makes smaller, busier dabs");
+  b.add_input<decl::Float>("Smoothness"_ustr)
+      .default_value(0.15f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("0 gives flat dabs with a clear edge, 1 melts them into each other");
+  b.add_input<decl::Float>("Strength"_ustr)
+      .default_value(1.0f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR);
+  b.add_input<decl::Float>("Randomness"_ustr)
+      .default_value(1.0f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("0 lines the dabs up on a grid");
+  b.add_input<decl::Float>("Seed"_ustr).default_value(0.0f);
+  b.add_input<decl::Vector>("Normal"_ustr).hide_value();
+  b.add_output<decl::Vector>("Normal"_ustr);
+  b.add_output<decl::Float>("Dab"_ustr).description("Random value per dab, for color variation");
+}
+
+static int node_gpu(GPUMaterial *mat,
+                    bNode *node,
+                    bNodeExecData * /*execdata*/,
+                    GPUNodeStack *in,
+                    GPUNodeStack *out)
+{
+  if (!in[7].link) {
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[7].link);
+  }
+  return GPU_stack_link(mat,
+                        node,
+                        "node_enso_painterly_normals",
+                        in,
+                        out,
+                        GPU_kernel_globals(),
+                        GPU_shading_data());
+}
+
+}  // namespace nodes::node_shader_enso_painterly_normals_cc
+
+void register_node_type_sh_enso_painterly_normals()
+{
+  namespace file_ns = nodes::node_shader_enso_painterly_normals_cc;
+  static bke::bNodeType ntype;
+  sh_node_type_base(&ntype, "ShaderNodeEnsoPainterlyNormals"_ustr);
+  ntype.ui_name = "Ensō Painterly Normals";
+  ntype.ui_description =
+      "Procedural painterly normals: the light breaks into flat dabs of paint, with no image "
+      "needed. Use Ensō Brush Normals for your own brush maps (EEVEE)";
+  ntype.nclass = NODE_CLASS_OP_VECTOR;
+  ntype.declare = file_ns::node_declare;
+  ntype.gpu_fn = file_ns::node_gpu;
+  ntype.default_width = 170.0f;
+  bke::node_register_type(ntype);
+}
+
 }  // namespace blender

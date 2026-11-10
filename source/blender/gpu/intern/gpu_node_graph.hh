@@ -58,6 +58,7 @@ enum GPUNodeLinkType {
   GPU_NODE_LINK_OUTPUT,
   GPU_NODE_LINK_UNIFORM,
   GPU_NODE_LINK_DIFFERENTIATE_FLOAT_FN,
+  GPU_NODE_LINK_ENSO_BLUR_FN,
   GPU_NODE_LINK_SHADING_DATA,
   GPU_NODE_LINK_KERNEL_GLOBALS,
 };
@@ -114,7 +115,7 @@ struct GPUNodeLink {
     GPULayerAttr *layer_attr;
     /* GPU_NODE_LINK_IMAGE_BLENDER */
     GPUMaterialTexture *texture;
-    /* GPU_NODE_LINK_DIFFERENTIATE_FLOAT_FN */
+    /* GPU_NODE_LINK_DIFFERENTIATE_FLOAT_FN, GPU_NODE_LINK_ENSO_BLUR_FN (name only) */
     struct {
       const char *function_name;
       float filter_width;
@@ -186,6 +187,8 @@ struct GPUNodeGraphFunctionLink {
   GPUNodeGraphFunctionLink *next, *prev;
   char name[16];
   GPUNodeLink *outlink;
+  /* Return type of the generated function. */
+  GPUType return_type;
 };
 
 struct GPUNodeGraph {

@@ -611,6 +611,7 @@ char *GPU_material_split_sub_function(GPUMaterial *material,
 
   GPUNodeGraphFunctionLink *func_link = MEM_new_zeroed<GPUNodeGraphFunctionLink>(__func__);
   func_link->outlink = *link;
+  func_link->return_type = return_type;
   SNPRINTF(func_link->name, "ntree_fn%d", material->generated_function_len++);
   BLI_addtail(&material->graph.material_functions, func_link);
 

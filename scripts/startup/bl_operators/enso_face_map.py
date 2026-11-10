@@ -483,9 +483,27 @@ class OBJECT_OT_enso_bake_face_map(Operator):
                 n += apply_to_material(slot.material, image, uv_name, center, fwd, up)
         if n:
             self.report({'INFO'}, "Face map baked and connected to %d Face Shadow node(s)" % n)
+            return {'FINISHED'}
+        # No Face Shadow node yet: add the whole reading setup to the active material, ready
+        # to use, so the map never has to be wired by hand.
+        mat = ob.active_material
+        if mat is not None and mat.node_tree is not None:
+            tree = mat.node_tree
+            xs = [nd.location.x for nd in tree.nodes] or [0.0]
+            ys = [nd.location.y for nd in tree.nodes] or [0.0]
+            frame = tree.nodes.new("NodeFrame")
+            frame.label = "Ensō Face Map (use the Shade of Map On The Face Only)"
+            fs = tree.nodes.new("ShaderNodeEnsoFaceShadow")
+            fs.parent = frame
+            fs.location = (min(xs) - 500.0, min(ys) - 200.0)
+            n = apply_to_material(mat, image, uv_name, center, fwd, up)
+        if n:
+            self.report({'INFO'}, "Face map baked and added to \"%s\": plug a light's Direction into "
+                        "Ensō Face Shadow and use the Map On The Face Only result as the shade"
+                        % mat.name)
         else:
-            self.report({'INFO'}, "Face map baked: \"%s\". Add For Each Light: Anime Face to use it"
-                        % image.name)
+            self.report({'INFO'}, "Face map baked: \"%s\". Give the object a material, then bake "
+                        "again or add For Each Light: Anime Face" % image.name)
         return {'FINISHED'}
 
 
