@@ -571,6 +571,14 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description("Width of the smoothed edge in screen pixels");
   b.add_input<decl::Vector>("Normal"_ustr)
       .hide_value();
+  b.add_input<decl::Float>("Shadow Distance"_ustr)
+      .default_value(2.0f)
+      .min(0.0f)
+      .max(1000.0f)
+      .subtype(PROP_DISTANCE)
+      .description("The node looks this far toward the light for something that blocks it, and "
+                   "finds the shadows by itself: no Mask needed. Only things inside the camera "
+                   "view can cast these shadows. 0 turns it off");
   b.add_output<decl::Float>("Shade"_ustr)
       .description("Light with all shadows: 1 lit, 0 in any shadow");
   b.add_output<decl::Float>("Light"_ustr)
@@ -581,6 +589,8 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description("1 on the side turned away from the light");
   b.add_output<decl::Float>("Facing Light"_ustr)
       .description("Raw value: 1 facing the light, -1 facing away");
+  b.add_output<decl::Float>("Self Shadow"_ustr)
+      .description("1 where the object shadows itself on the lit side");
 }
 
 static int node_gpu(GPUMaterial *mat,
@@ -592,8 +602,9 @@ static int node_gpu(GPUMaterial *mat,
   if (!in[6].link) {
     GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[6].link);
   }
+  GPU_material_flag_set(mat, GPU_MATFLAG_RAYCAST);
   const bool ok = GPU_stack_link(
-      mat, node, "node_enso_shade_info", in, out);
+      mat, node, "node_enso_shade_info", in, out, GPU_kernel_globals(), GPU_shading_data());
   if (ok) {
     enso_pass_write(mat, "Enso Shade", out[0].link);
     enso_pass_write(mat, "Enso Light", out[1].link);

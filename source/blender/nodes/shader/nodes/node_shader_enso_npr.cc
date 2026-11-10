@@ -345,7 +345,8 @@ void register_node_type_sh_enso_reflection()
   ntype.ui_name = "Ensō Reflection";
   ntype.ui_description =
       "What the surface would reflect, as a mask and a flat colour per object: paint fake "
-      "reflections on floors, water and glass (EEVEE)";
+      "reflections on floors, water and glass. Only things inside the camera view can be "
+      "reflected (EEVEE)";
   ntype.nclass = NODE_CLASS_INPUT;
   ntype.declare = file_ns::node_declare;
   ntype.gpu_fn = file_ns::node_gpu;

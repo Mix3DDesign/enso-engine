@@ -18,6 +18,8 @@
 
 #include "gpu_shader_material_interface.bsl.hh"
 
+#include "gpu_shader_material_enso_npr.bsl.hh"
+
 float3 enso_cel_normalize(float3 v, float3 fallback)
 {
   float l = length(v);
@@ -282,13 +284,18 @@ void node_enso_shade_info(float3 light_dir,
                           float softness,
                           float edge_px,
                           float3 N,
+                          float shadow_distance,
+                          [[resource_table]] KernelGlobals &kg,
+                          const ShadingData &sd,
                           float &shade,
                           float &light,
                           float &cast_shadow,
                           float &form_shadow,
-                          float &facing_light)
+                          float &facing_light,
+                          float &self_shadow)
 {
   N = enso_cel_normalize(N, float3(0.0f, 0.0f, 1.0f));
+  self_shadow = 0.0f;
   if (dot(light_dir, light_dir) < 1e-12f) {
     /* No direction: the light is off (Ensō Light Select with a hidden light). */
     shade = 0.0f;
@@ -306,8 +313,43 @@ void node_enso_shade_info(float3 light_dir,
   light = enso_cel_step(terminator, v, softness, edge_px);
   form_shadow = 1.0f - light;
   float open_light = enso_cel_step(0.5f, saturate(mask), softness, edge_px);
-  cast_shadow = light * (1.0f - open_light);
-  shade = light * open_light;
+  /* Shadows found on screen: follow the way to the light through the scene depth. What blocks
+   * it is either the object itself or another one. */
+  float by_other = 0.0f;
+  float by_self = 0.0f;
+#if defined(GPU_FRAGMENT_SHADER) || defined(GLSL_CPP_STUBS)
+  if (shadow_distance > 0.0f && nl > 0.0f) {
+    /* The engine's own screen ray-cast, the one behind the Raycast node: it also tells whether
+     * the hit is this object or another one. */
+    bool is_hit;
+    bool self_hit;
+    float hit_distance;
+    float3 hit_position;
+    float3 hit_normal;
+    raycast_eval(kg,
+                 sd,
+                 sd.P + N * 0.005f,
+                 L,
+                 shadow_distance,
+                 false,
+                 is_hit,
+                 self_hit,
+                 hit_distance,
+                 hit_position,
+                 hit_normal);
+    if (is_hit) {
+      if (!self_hit) {
+        by_other = 1.0f;
+      }
+      else if (hit_distance > 0.02f) {
+        by_self = 1.0f;
+      }
+    }
+  }
+#endif
+  cast_shadow = light * max(1.0f - open_light, by_other);
+  self_shadow = light * by_self;
+  shade = light * open_light * (1.0f - by_other) * (1.0f - by_self);
 }
 
 /* Ensō Stylized Highlight: a highlight that can be moved, stretched, split and squared. */
