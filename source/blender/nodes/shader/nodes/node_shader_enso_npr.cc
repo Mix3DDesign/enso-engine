@@ -364,10 +364,11 @@ static void node_declare(NodeDeclarationBuilder &b)
       .hide_value()
       .description("Anything to blur: a colour, a value or a vector from any textures and nodes");
   b.add_input<decl::Float>("Radius"_ustr)
-      .default_value(8.0f)
+      .default_value(2.0f)
       .min(0.0f)
-      .max(64.0f)
-      .description("Blur size in screen pixels");
+      .max(100.0f)
+      .description("Blur size in percent of the texture (1 is a hundredth of a UV tile). The "
+                   "blur stays the same from any distance and angle");
   b.add_output<decl::Color>("Value"_ustr)
       .description("The blurred result. Plug it into a colour, value or vector input");
 }
@@ -389,6 +390,8 @@ static int node_gpu(GPUMaterial *mat,
   GPU_link(mat,
            "node_enso_blur_setup",
            in[1].link ? in[1].link : GPU_uniform(in[1]),
+           GPU_kernel_globals(),
+           GPU_shading_data(),
            &ready);
   return GPU_link(
       mat, "node_enso_blur", ready, GPU_enso_blur_function(value_function), &out[0].link);
@@ -404,7 +407,7 @@ void register_node_type_sh_enso_blur()
   ntype.ui_name = "Ensō Blur";
   ntype.ui_description =
       "Blurs whatever is plugged into it, like a blur filter: textures, colours, values and "
-      "vectors. The size is in screen pixels (EEVEE)";
+      "vectors. The size is measured in the texture, so it does not change with the view (EEVEE)";
   ntype.nclass = NODE_CLASS_OP_COLOR;
   ntype.declare = file_ns::node_declare;
   ntype.gpu_fn = file_ns::node_gpu;

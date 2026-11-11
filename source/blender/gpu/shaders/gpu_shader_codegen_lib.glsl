@@ -255,10 +255,12 @@ ClosureThinRefraction to_closure_thin_refraction(ClosureUndetermined cl)
 float g_derivative_filter_width = 0.0f;
 /* Precise derivatives */
 int g_derivative_flag = 0;
-/* Blur node: offset of the coordinates in pixels (used when g_derivative_flag is 2), and the
- * radius of the disc in pixels. */
+/* Blur node: offset of the texture coordinates, in the units of the coordinates (used when
+ * g_derivative_flag is 2), the radius of the disc in the same units, and a turn of the disc
+ * that changes with every pixel and render sample. */
 float2 g_enso_blur_offset = float2(0.0f);
 float g_enso_blur_radius = 0.0f;
+float g_enso_blur_rotation = 0.0f;
 
 float3 dF_impl([[maybe_unused]] float3 v)
 {
@@ -268,7 +270,28 @@ float3 dF_impl([[maybe_unused]] float3 v)
   return float3(0.0f);
 #else
   if (g_derivative_flag == 2) {
-    return gpu_dfdx(v) * g_enso_blur_offset.x + gpu_dfdy(v) * g_enso_blur_offset.y;
+    /* Move inside the texture itself: the two directions the coordinates change in across the
+     * surface are made the same length and square to each other, so the blur is round and the
+     * same size in the texture from any distance and any angle, like a blur filter on an
+     * image. */
+    float3 dx = gpu_dfdx(v);
+    float3 dy = gpu_dfdy(v);
+    float lx = length(dx);
+    float ly = length(dy);
+    if (lx < ly) {
+      float3 swap = dx;
+      dx = dy;
+      dy = swap;
+      lx = ly;
+    }
+    if (lx < 1e-12f) {
+      return float3(0.0f);
+    }
+    float3 e1 = dx / lx;
+    float3 e2 = dy - e1 * dot(dy, e1);
+    float l2 = length(e2);
+    e2 = (l2 > lx * 1e-4f) ? e2 / l2 : float3(0.0f);
+    return e1 * g_enso_blur_offset.x + e2 * g_enso_blur_offset.y;
   }
   if (g_derivative_flag > 0) {
     return gpu_dfdx(v) * g_derivative_filter_width;
@@ -316,15 +339,15 @@ void dF_branch_incomplete([[maybe_unused]] float fn,
       result -= float2((fn)); \
     }
 
-/* Average of `fn` (float4) over a disc of pixels: 16 points on a spiral, soft falloff. */
+/* Average of `fn` (float4) over a disc in the texture: 24 points on a spiral, soft falloff. */
 #  define enso_blur_branch(fn, result) \
     if (true) { \
       int enso_prev_flag = g_derivative_flag; \
       float4 enso_acc = float4(0.0f); \
       float enso_wsum = 0.0f; \
-      for (int enso_i = 0; enso_i < 16; enso_i++) { \
-        float enso_r = sqrt((float(enso_i) + 0.5f) / 16.0f); \
-        float enso_a = float(enso_i) * 2.39996323f; \
+      for (int enso_i = 0; enso_i < 24; enso_i++) { \
+        float enso_r = sqrt((float(enso_i) + 0.5f) / 24.0f); \
+        float enso_a = float(enso_i) * 2.39996323f + g_enso_blur_rotation; \
         float enso_w = exp(-2.0f * enso_r * enso_r); \
         g_enso_blur_offset = float2(cos(enso_a), sin(enso_a)) * (enso_r * g_enso_blur_radius); \
         g_derivative_flag = 2; \
