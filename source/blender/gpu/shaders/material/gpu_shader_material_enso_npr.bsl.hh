@@ -291,110 +291,101 @@ void enso_curvature_core([[resource_table]] KernelGlobals &kg,
   /* Pre-pass depth unit, so depth steps below are in meters. */
   float unit = d0 / zv;
   /* Never less than a few pixels: one pixel only sees the facets of the mesh. */
-  float r_px = clamp(max(radius, 0.0f) * ppm, 3.0f, 256.0f);
-  float r_m = r_px / ppm;
-  float3 vx = normalize(view.viewinv[0].xyz);
-  float3 vy = normalize(view.viewinv[1].xyz);
-  float3 dPdx = gpu_dfdx(sd.P);
-  float3 dPdy = gpu_dfdy(sd.P);
+  float r_m = max(max(radius, 0.0f), 3.0f / ppm);
+  float r_px = r_m * ppm;
+  /* The taps are laid out on the surface around the point (its tangent plane), in meters, and
+   * then looked up on screen. The band around an edge is then as wide as the radius on the
+   * object, whatever the distance and the angle the face is seen from. */
+  float3 t1 = cross(N0, (abs(N0.z) < 0.9f) ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f));
+  t1 = normalize(t1);
+  float3 t2 = cross(N0, t1);
+  /* Direction to the camera. */
+  bool is_persp = view.winmat[3][3] == 0.0f;
+  float3 V = is_persp ? normalize(view.viewinv[3].xyz - sd.P) : normalize(view.viewinv[2].xyz);
+  /* A tap that lands past the outline of the object means the surface turned away there: the
+   * edge is on the outline. That only counts on faces that look at the camera. On the rim of a
+   * round shape the surface is seen edge on, and there it says nothing. */
+  float outline_weight = smoothstep(0.12f, 0.45f, dot(N0, V));
+  /* Depth the surface covers inside one pixel. A face seen at a low angle covers a lot, and
+   * the depth of a tap can be that far off without being another surface. */
   float3 vz = float3(view.viewmat[0][2], view.viewmat[1][2], view.viewmat[2][2]);
-  float slope = (abs(dot(vz, dPdx)) + abs(dot(vz, dPdy))) * r_px * 1.5f;
-  float step_m = max(depth_threshold, r_m * 2.0f) + slope;
+  float pixel_depth = (abs(dot(vz, gpu_dfdx(sd.P))) + abs(dot(vz, gpu_dfdy(sd.P)))) * 2.0f;
   float jit;
   enso_pixel_jitter(kg, px, jit);
   /* Rings of eight directions. A wide radius gets more rings, and the rings move in and out
-   * with every render sample, so the band around an edge is one clean gradient with no steps
-   * or blotches. */
-  const int pairs = 8;
+   * with every render sample, so the band around an edge is one clean gradient. */
+  const int directions = 8;
   float sum = 0.0f;
   float weight = 0.0f;
-  float sum_single = 0.0f;
-  float weight_single = 0.0f;
-  float weight_full = 0.0f;
-  /* Blur: the same measure is taken around four more points next to the pixel and averaged.
-   * The normals of a mesh change in steps from face to face, and one measure at the pixel
-   * shows those steps as dots or lines when the radius is close to the size of a face. */
+  /* Blur: the same measure is taken around four more points next to the point and averaged.
+   * The normals of a mesh change in steps from face to face, and one measure shows those
+   * steps as dots or lines when the radius is close to the size of a face. */
   bool blurred = blur > 0.001f;
   int centers = blurred ? 5 : 1;
   int rings = blurred ? 3 : ((r_px > 24.0f) ? 6 : 4);
-  float spread = r_px * saturate(blur) * 0.7f;
+  float spread = r_m * saturate(blur) * 0.7f;
   float jit_r = fract(jit * 7.31f + 0.137f);
   for (int center = 0; center < centers; center++) {
-    float2 pc = px;
+    float3 Pc = sd.P;
     if (center > 0) {
       float ca = (float(center) + jit * 0.5f) * 1.5707963f;
-      pc += float2(cos(ca), sin(ca)) * spread;
+      Pc += (t1 * cos(ca) + t2 * sin(ca)) * spread;
     }
     for (int ring = 0; ring < rings; ring++) {
       float f = (float(rings - ring) - jit_r) / float(rings);
-      float rr = max(r_px * f, 1.0f);
-      for (int i = 0; i < pairs; i++) {
-        float a = (float(i) + 0.29f * float(ring) + jit) * (3.14159265f / float(pairs));
-        float2 dir = float2(cos(a), sin(a));
-        float3 D = vx * dir.x + vy * dir.y;
-        /* The bend is measured along the surface and not along the screen, so an edge has the
-         * same strength from every side it is looked at. */
-        float3 Dt = D - N0 * dot(D, N0);
-        float lt = length(Dt);
-        Dt = (lt > 0.2f) ? Dt / lt : D;
-        float value_a = 0.0f;
-        float value_b = 0.0f;
-        bool ok_a = false;
-        bool ok_b = false;
-        for (int side = 0; side < 2; side++) {
-          float sgn = (side == 0) ? 1.0f : -1.0f;
-          float2 q = pc + dir * (rr * sgn);
-          if (any(lessThan(q, float2(0.0f))) || any(greaterThanEqual(q, size))) {
-            continue;
-          }
-          bool vq;
-          float3 Nq;
-          float dq;
-          uint idq;
-          enso_prepass_fetch(kg, q, vq, Nq, dq, idq);
-          if (!vq || dq > 1e9f) {
-            continue;
-          }
-          float gap = (dq - d0) / unit;
+      float rho = max(r_m * f, 1.0f / ppm);
+      /* How far the visible surface may be from the tap and still be the same surface. */
+      float reach = rho * 2.0f + pixel_depth + max(depth_threshold, 0.0f) * 0.1f;
+      for (int i = 0; i < directions * 2; i++) {
+        float a = (float(i) + 0.29f * float(ring) + jit) * (3.14159265f / float(directions));
+        float3 Dt = t1 * cos(a) + t2 * sin(a);
+        float3 W = Pc + Dt * rho;
+        bool on_screen;
+        float2 q = enso_npr_world_to_px(view, W, size, on_screen);
+        if (!on_screen || any(lessThan(q, float2(0.0f))) || any(greaterThanEqual(q, size))) {
+          continue;
+        }
+        bool vq;
+        float3 Nq;
+        float dq;
+        uint idq;
+        enso_prepass_fetch(kg, q, vq, Nq, dq, idq);
+        bool past_outline = false;
+        if (!vq || dq > 1e9f) {
+          /* Nothing there but the background. */
+          past_outline = true;
+        }
+        else {
+          /* Positive: what is seen there is behind the tap. */
+          float gap = dq / unit - enso_npr_view_z(view, W);
           if (idq != id0) {
-            if (abs(gap) < r_m * 1.5f + slope) {
+            if (abs(gap) < rho * 1.5f) {
               contact = max(contact, 1.0f - f * 0.5f);
             }
+            if (gap <= reach) {
+              continue;
+            }
+            past_outline = true;
+          }
+          else if (gap > reach) {
+            past_outline = true;
+          }
+          else if (gap < -reach) {
+            /* Another part of the object in front. */
             continue;
           }
-          if (abs(gap) > step_m) {
-            continue;
-          }
-          float dist = sqrt((rr / ppm) * (rr / ppm) + gap * gap);
-          float bend = dot(Nq - N0, Dt) * sgn / max(dist, 1e-6f);
-          if (side == 0) {
-            value_a = bend;
-            ok_a = true;
-          }
-          else {
-            value_b = bend;
-            ok_b = true;
-          }
         }
-        /* Taps count in opposite pairs. At a silhouette one side is missing, and counting the
-         * other alone would read the outline of every round shape as an edge. */
-        weight_full += 2.0f;
-        if (ok_a && ok_b) {
-          sum += value_a + value_b;
-          weight += 2.0f;
+        if (past_outline) {
+          /* Counts as a right-angle edge. */
+          sum += outline_weight / rho;
+          weight += outline_weight;
         }
-        else if (ok_a || ok_b) {
-          sum_single += ok_a ? value_a : value_b;
-          weight_single += 1.0f;
+        else {
+          sum += dot(Nq - N0, Dt) / rho;
+          weight += 1.0f;
         }
       }
     }
-  }
-  /* Close to the outline with a wide radius nearly every pair has a side off the object. The
-   * single sides are used there, so the band does not break up next to the outline. */
-  if (weight < 0.25f * weight_full && weight_single > 0.0f) {
-    sum += sum_single;
-    weight += weight_single;
   }
   curvature = (weight > 0.0f) ? (sum / weight) * r_m : 0.0f;
 #endif
