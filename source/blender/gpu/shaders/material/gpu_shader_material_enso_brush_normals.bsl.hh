@@ -313,14 +313,52 @@ void node_enso_brush_normals_image(float scale,
   normal = enso_brush_bump(sd, N, s, strength, height, hx, hy);
 }
 
-/* Ensō Painterly Normals: the procedural version, no image needed. The normal is snapped to the
- * centre of a Voronoi cell laid out in normal space, and the cells are pushed around by noise
- * that follows the surface. Every cell becomes one flat dab of paint, so the light breaks into
- * brush shaped patches the way a painter blocks in a form. */
+/* Ensō Painterly Normals: the procedural version, no image needed.
+ *
+ * The surface is cut into Voronoi cells laid out on the object (in the texture coordinates),
+ * and noise pushes the coordinates around first, so every cell gets a torn, brushed outline.
+ * Each cell is one dab of paint: the whole dab leans its normal one way, so the light breaks
+ * into flat patches, on flat walls as well as on round forms. Facet also snaps the normal to
+ * cells laid out in normal space, which blocks a round form in with a few planes. */
+
+/* Smooth Voronoi: the centre of the cell around q and a random vector of that cell. */
+void enso_painterly_cells(float3 q,
+                          float sharp,
+                          float randomness,
+                          float seed,
+                          float3 &center,
+                          float3 &random_vector)
+{
+  float3 cell = floor(q);
+  float3 acc = float3(0.0f);
+  float3 acc_random = float3(0.0f);
+  float weight_sum = 0.0f;
+  for (int z = -1; z <= 1; z++) {
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        float3 c = cell + float3(float(x), float(y), float(z));
+        float3 h = hash_vec3_to_vec3(c + float3(seed, seed * 1.7f, seed * 2.3f));
+        float3 spot = c + mix(float3(0.5f), h, saturate(randomness));
+        float3 v = q - spot;
+        float w = exp(-dot(v, v) * sharp);
+        acc += spot * w;
+        acc_random += hash_vec3_to_vec3(c + float3(7.3f + seed, 19.1f, 3.7f)) * w;
+        weight_sum += w;
+      }
+    }
+  }
+  float inv = 1.0f / max(weight_sum, 1e-30f);
+  center = acc * inv;
+  random_vector = acc_random * inv;
+}
+
 [[node]]
-void node_enso_painterly_normals(float scale,
+void node_enso_painterly_normals(float3 co,
+                                 float scale,
                                  float distortion,
                                  float noise_scale,
+                                 float tilt,
+                                 float facet,
                                  float smoothness,
                                  float strength,
                                  float randomness,
@@ -329,48 +367,44 @@ void node_enso_painterly_normals(float scale,
                                  [[resource_table]] KernelGlobals &kg,
                                  const ShadingData &sd,
                                  float3 &normal,
-                                 float &dab)
+                                 float &dab,
+                                 float3 &position)
 {
   N = normalize(N);
   ObjectMatrices obm = kg.object_matrices_get(sd);
-  float3 Po = (obm.model_inverse * float4(sd.P, 1.0f)).xyz;
   float3 No = enso_brush_normalize((float4(N, 0.0f) * obm.model).xyz);
-  float3 np = Po * noise_scale + float3(seed * 13.7f, seed * 5.1f, seed * 9.3f);
-  float3 warp = float3(snoise(np),
-                       snoise(np + float3(31.4f, 17.7f, 5.3f)),
-                       snoise(np + float3(-11.2f, 43.1f, 27.9f))) *
-                distortion;
+  /* Two layers of noise push the coordinates, like mixing a noise colour into them. */
+  float3 np = co * noise_scale + float3(seed * 13.7f, seed * 5.1f, seed * 9.3f);
+  float3 np2 = np * 2.03f + float3(17.0f);
+  float3 warp = float3(snoise(np) + 0.5f * snoise(np2),
+                       snoise(np + float3(31.4f, 17.7f, 5.3f)) +
+                           0.5f * snoise(np2 + float3(31.4f, 17.7f, 5.3f)),
+                       snoise(np + float3(-11.2f, 43.1f, 27.9f)) +
+                           0.5f * snoise(np2 + float3(-11.2f, 43.1f, 27.9f))) *
+                (distortion / 1.5f);
   float s = max(scale, 0.01f);
-  float3 q = (No + warp) * s;
-  float3 cell = floor(q);
   /* Hard cells at 0, cells that melt into each other at 1. */
   float sharp = mix(60.0f, 3.0f, saturate(smoothness));
-  float3 acc = float3(0.0f);
-  float weight_sum = 0.0f;
-  float nearest = 1e9f;
-  dab = 0.0f;
-  for (int z = -1; z <= 1; z++) {
-    for (int y = -1; y <= 1; y++) {
-      for (int x = -1; x <= 1; x++) {
-        float3 c = cell + float3(float(x), float(y), float(z));
-        float3 h = hash_vec3_to_vec3(c + float3(seed, seed * 1.7f, seed * 2.3f));
-        float3 center = c + mix(float3(0.5f), h, saturate(randomness));
-        float3 v = q - center;
-        float d2 = dot(v, v);
-        float w = exp(-d2 * sharp);
-        acc += center * w;
-        weight_sum += w;
-        if (d2 < nearest) {
-          nearest = d2;
-          dab = h.x;
-        }
-      }
-    }
+  float3 center;
+  float3 random_vector;
+  enso_painterly_cells((co + warp) * s, sharp, randomness, seed, center, random_vector);
+  position = center / s;
+  dab = random_vector.x;
+  /* The dab leans along the surface. */
+  float3 lean = random_vector * 2.0f - 1.0f;
+  lean -= No * dot(lean, No);
+  float3 Nd = No + lean * tilt;
+  Nd = (dot(Nd, Nd) > 1e-8f) ? normalize(Nd) : No;
+  if (facet > 0.001f) {
+    float3 facet_center;
+    float3 unused;
+    enso_painterly_cells((Nd + warp) * s, sharp, randomness, seed + 5.0f, facet_center, unused);
+    float3 Nf = (dot(facet_center, facet_center) > 1e-6f) ? normalize(facet_center) : Nd;
+    Nd = mix(Nd, Nf, saturate(facet));
+    Nd = (dot(Nd, Nd) > 1e-8f) ? normalize(Nd) : No;
   }
-  float3 pn = acc / max(weight_sum, 1e-30f);
-  pn = (dot(pn, pn) > 1e-6f) ? normalize(pn) : No;
   /* Object to world for normals: transposed inverse model matrix. */
-  float3 Nw = (float4(pn, 0.0f) * obm.model_inverse).xyz;
+  float3 Nw = (float4(Nd, 0.0f) * obm.model_inverse).xyz;
   Nw = (dot(Nw, Nw) > 1e-12f) ? normalize(Nw) : N;
   float3 mixed = mix(N, Nw, saturate(strength));
   normal = (dot(mixed, mixed) > 1e-8f) ? normalize(mixed) : N;
