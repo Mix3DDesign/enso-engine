@@ -570,20 +570,22 @@ float enso_hair_hash(float x)
   return fract(sin(x * 12.9898f) * 43758.5453f);
 }
 
-/* Ensō Hair Highlight: the highlight of anime hair the way it is painted in a hair map, made on
- * the fly. A few strands carry a mark. A mark is tall and thin, runs along its strand and has a
- * jagged top and bottom, like a small bolt of lightning. The marks stay where they are on the
- * hair; a ring around the reflection of the light decides how bright they are, so they come and
- * go as the light and the camera move. */
+/* Ensō Hair Highlight: the band of light across anime hair, drawn the way illustrators draw it.
+ *
+ * The band sits at a height on the head. Across every strand it is cut into slivers, and each
+ * sliver has its own length, its own height and a shape: a spike that closes to a point at the
+ * top and the bottom, a triangle, a block, a thin line, or a mix of them. Together they make
+ * the toothed band of a cel-shaded hair highlight. The slivers stay where they are on the hair;
+ * a ring around the reflection of the light decides how bright they are. */
 [[node]]
 void node_enso_hair_highlight(float map,
                               float3 light_dir,
                               float position,
-                              float length_in,
+                              float height_in,
                               float jagged,
-                              float points,
+                              float slivers,
                               float coverage,
-                              float stroke,
+                              float width,
                               float ring_size,
                               float ring_softness,
                               float intensity,
@@ -599,6 +601,7 @@ void node_enso_hair_highlight(float map,
                               float4 uv,
                               float4 center_prop,
                               float use_map,
+                              float style,
                               [[resource_table]] KernelGlobals &kg,
                               ShadingData &sd,
                               float &highlight,
@@ -611,10 +614,10 @@ void node_enso_hair_highlight(float map,
   enso_hair_strand(strand_uv, strand_id, uv, strands, across, along, id);
   strand = id;
   ObjectMatrices obm = kg.object_matrices_get(sd);
-  /* Where on the hair the marks sit: at a height on the head measured down from the top (so
-   * they line up around the head whatever the length of each strand), or at a distance from
-   * the root of each strand. The height needs the head centre: the node's Center, or the one
-   * Make Hair Strand Data stored on the object. */
+  /* Height on the head measured down from the top (so the band lines up around the head
+   * whatever the length of each strand), or the distance from the root of each strand. The
+   * height needs the head centre: the node's Center, or the one Make Hair Strand Data stored
+   * on the object. */
   float t = along;
   if (dot(center, center) > 0.0f || center_prop.w > 0.5f) {
     float3 c = (dot(center, center) > 0.0f) ? center : center_prop.xyz;
@@ -625,33 +628,70 @@ void node_enso_hair_highlight(float map,
   float3 V = coordinate_impl(kg, sd, sd.P, sd.N).incoming;
   float3 L = enso_cel_normalize(light_dir, float3(0.0f, 0.0f, 1.0f));
   float3 Nn = enso_cel_normalize(N, float3(0.0f, 0.0f, 1.0f));
-  /* Looking from above moves the marks down the hair a little, like a reflection. */
+  /* Looking from above moves the band down the hair a little, like a reflection. */
   float place = position + view_shift * 0.5f * V.z;
-  float len = max(length_in, 0.0f);
+  float band_height = max(height_in, 0.0f);
   float jag = saturate(jagged);
 
-  /* The mark of this strand: its top and bottom edge are broken lines through a few points
-   * across the strand, each point with its own height and its own length. Both ends close to
-   * a point. */
-  float xs = (across - 0.5f) / max(stroke, 1e-3f) + 0.5f;
-  float mark = 0.0f;
-  if (xs > 0.0f && xs < 1.0f) {
-    float k = max(floor(points + 0.5f), 1.0f);
-    float xk = xs * k;
-    float j = floor(xk);
-    float f = xk - j;
-    float e0 = max(1.0f - abs(2.0f * j / k - 1.0f), 0.0f);
-    float e1 = max(1.0f - abs(2.0f * (j + 1.0f) / k - 1.0f), 0.0f);
-    float c0 = (enso_hair_hash(id * 97.0f + j * 13.1f) - 0.5f) * jag * len * 1.4f;
-    float c1 = (enso_hair_hash(id * 97.0f + (j + 1.0f) * 13.1f) - 0.5f) * jag * len * 1.4f;
-    float l0 = len * e0 * mix(1.0f, 0.25f + 1.1f * enso_hair_hash(id * 57.0f + j * 7.7f), jag);
-    float l1 = len * e1 *
-               mix(1.0f, 0.25f + 1.1f * enso_hair_hash(id * 57.0f + (j + 1.0f) * 7.7f), jag);
-    float own = (fract(id * 37.3f) - 0.5f) * jag * len * 0.8f;
-    float inside = mix(l0, l1, f) * 0.5f - abs(t - (place + own + mix(c0, c1, f)));
-    mark = enso_cel_step(0.0f, inside, softness * max(len, 1e-4f), edge_px);
+  /* The sliver this point is in. */
+  float count = max(floor(slivers + 0.5f), 1.0f);
+  float x = across * count;
+  float slot = floor(x);
+  float f = x - slot;
+  float key = id * 97.0f + slot * 13.1f;
+  float r_place = enso_hair_hash(key);
+  float r_length = enso_hair_hash(key + 5.7f);
+  float r_shown = enso_hair_hash(key + 11.3f);
+  float r_width = enso_hair_hash(key + 17.9f);
+  float r_shape = enso_hair_hash(key + 23.1f);
+  float r_point = enso_hair_hash(key + 29.5f);
+
+  /* Shape of the style: how much the sliver narrows to a point, which end is pointed
+   * (-1 the bottom only, 0 both, 1 the top only), how much of its slot it fills and how long
+   * it is. */
+  float taper = 1.0f;
+  float point = 0.0f;
+  float fill = 0.92f;
+  float stretch = 1.0f;
+  if (style > 3.5f) {
+    /* Mix: every sliver is something else. */
+    taper = 0.25f + 0.75f * r_shape;
+    point = r_point * 2.0f - 1.0f;
+    fill = 0.35f + 0.6f * r_width;
+    stretch = 0.6f + 0.9f * r_shape;
   }
-  marks = mark * step(1.0f - saturate(coverage), fract(id * 91.7f));
+  else if (style > 2.5f) {
+    /* Lines. */
+    taper = 0.75f;
+    fill = 0.2f;
+    stretch = 1.7f;
+  }
+  else if (style > 1.5f) {
+    /* Blocks. */
+    taper = 0.12f;
+    fill = 0.72f;
+  }
+  else if (style > 0.5f) {
+    /* Triangles: flat on top, pointed at the bottom. */
+    point = -1.0f;
+    fill = 0.8f;
+  }
+  fill = saturate(fill * max(width, 0.0f) * (0.75f + 0.25f * r_width));
+
+  float u = abs(f - 0.5f) / max(fill * 0.5f, 1e-4f);
+  float mark = 0.0f;
+  if (u < 1.0f) {
+    float narrow = 1.0f - taper * u;
+    float own_place = place + (r_place - 0.5f) * jag * band_height * 0.9f;
+    float own_length = band_height * stretch * (1.0f - jag * 0.7f * r_length);
+    float above = own_length * 0.5f * mix(narrow, 1.0f, saturate(-point));
+    float below = own_length * 0.5f * mix(narrow, 1.0f, saturate(point));
+    float d = t - own_place;
+    float inside = (d > 0.0f) ? below - d : above + d;
+    mark = enso_cel_step(0.0f, inside, softness * max(band_height, 1e-4f) * 3.0f, edge_px) *
+           enso_cel_step(0.0f, 1.0f - u, softness * 2.0f, edge_px);
+  }
+  marks = mark * step(1.0f - saturate(coverage), r_shown);
   /* The ring: full strength where the surface mirrors the light into the camera, fading out
    * around it. */
   float3 H = enso_cel_normalize(L + V, Nn);

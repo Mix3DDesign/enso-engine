@@ -925,7 +925,7 @@ static void node_declare(NodeDeclarationBuilder &b)
       .default_value(1.0f)
       .hide_value()
       .description("Your own painted highlights (the red of an HM map). Unconnected, the node "
-                   "draws the marks itself from the hair strand data");
+                   "draws the highlight itself from the hair strand data");
   b.add_input<decl::Vector>("Light Direction"_ustr)
       .default_value({0.0f, -0.5f, 0.85f})
       .description("Direction toward the light, for example from Ensō Light Select");
@@ -934,63 +934,64 @@ static void node_declare(NodeDeclarationBuilder &b)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("Where the marks sit, measured down from the top of the head: 0 is the "
+      .description("Where the band sits, measured down from the top of the head: 0 is the "
                    "very top, 0.5 is level with the head centre");
-  b.add_input<decl::Float>("Length"_ustr)
-      .default_value(0.2f)
+  b.add_input<decl::Float>("Height"_ustr)
+      .default_value(0.1f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How tall the marks are, along the strand");
+      .description("How tall the band is");
   b.add_input<decl::Float>("Jagged"_ustr)
-      .default_value(0.75f)
+      .default_value(0.7f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How broken the top and bottom of a mark are. 0 gives smooth leaf shapes");
-  b.add_input<decl::Float>("Points"_ustr)
-      .default_value(3.0f)
+      .description("How different the slivers are in length and in height. 0 gives an even "
+                   "band");
+  b.add_input<decl::Float>("Slivers"_ustr)
+      .default_value(2.0f)
       .min(1.0f)
       .max(16.0f)
-      .description("Number of spikes in one mark");
+      .description("Number of slivers across one strand. Use 1 on hair made of many thin "
+                   "strands");
   b.add_input<decl::Float>("Coverage"_ustr)
-      .default_value(0.3f)
+      .default_value(0.8f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How many of the strands carry a mark");
-  b.add_input<decl::Float>("Mark Width"_ustr)
-      .default_value(0.4f)
+      .description("How many of the slivers are drawn. Lower leaves gaps in the band");
+  b.add_input<decl::Float>("Width"_ustr)
+      .default_value(1.0f)
       .min(0.0f)
-      .max(1.0f)
-      .subtype(PROP_FACTOR)
-      .description("How much of the width of a strand a mark covers");
+      .max(2.0f)
+      .description("Width of the slivers. Lower leaves a gap between them");
   b.add_input<decl::Float>("Ring Size"_ustr)
-      .default_value(0.5f)
+      .default_value(0.6f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How far around the reflection of the light the marks show. 1 shows them "
-                   "all the time");
+      .description("How far around the reflection of the light the band shows. 1 shows it "
+                   "all around the head, all the time");
   b.add_input<decl::Float>("Ring Softness"_ustr)
-      .default_value(0.2f)
+      .default_value(0.25f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How gently the marks fade at the edge of the ring");
+      .description("How gently the band fades at the edge of the ring");
   b.add_input<decl::Float>("Intensity"_ustr).default_value(1.0f).min(0.0f).max(10.0f);
   b.add_input<decl::Float>("View Shift"_ustr)
       .default_value(0.1f)
       .min(-1.0f)
       .max(1.0f)
-      .description("How far the marks slide down the hair as the camera goes up");
+      .description("How far the band slides down the hair as the camera goes up");
   b.add_input<decl::Float>("Along Strand"_ustr)
       .default_value(0.0f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("0 places the marks by height on the head, so they line up around it. 1 "
-                   "places them by distance from the root of each strand");
+      .description("0 places the band by height on the head, so it lines up around it. 1 "
+                   "places it by distance from the root of each strand");
   b.add_input<decl::Vector>("Center"_ustr)
       .default_value({0.0f, 0.0f, 0.0f})
       .subtype(PROP_XYZ)
@@ -1002,8 +1003,12 @@ static void node_declare(NodeDeclarationBuilder &b)
       .max(400.0f)
       .description("Only used on hair without strand data: the number of even strands the "
                    "active UV map is cut into along U");
-  b.add_input<decl::Float>("Softness"_ustr).default_value(0.0f).min(0.0f).max(1.0f).subtype(
-      PROP_FACTOR);
+  b.add_input<decl::Float>("Softness"_ustr)
+      .default_value(0.0f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("Blurs the edges of the slivers, for the soft painted look");
   b.add_input<decl::Float>("Edge Pixels"_ustr)
       .default_value(1.5f)
       .min(0.0f)
@@ -1013,10 +1018,15 @@ static void node_declare(NodeDeclarationBuilder &b)
       .hide_value()
       .description("Plug in Ensō Smooth Normals so the ring is one clean shape");
   b.add_output<decl::Float>("Highlight"_ustr)
-      .description("The marks, as bright as the ring lets them be");
-  b.add_output<decl::Float>("Marks"_ustr).description("The marks alone, always on");
+      .description("The band, as bright as the ring lets it be");
+  b.add_output<decl::Float>("Marks"_ustr).description("The band alone, always on");
   b.add_output<decl::Float>("Strand"_ustr)
       .description("Random value per strand, for color variation");
+}
+
+static void node_buts(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
+{
+  layout.prop(ptr, "style", ui::ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
 }
 
 static int node_gpu(GPUMaterial *mat,
@@ -1026,6 +1036,7 @@ static int node_gpu(GPUMaterial *mat,
                     GPUNodeStack *out)
 {
   const float use_map = in[0].link ? 1.0f : 0.0f;
+  const float style = float(node->custom1);
   if (!in[17].link) {
     GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[17].link);
   }
@@ -1053,6 +1064,7 @@ static int node_gpu(GPUMaterial *mat,
                                  uv,
                                  center_prop,
                                  GPU_constant(&use_map),
+                                 GPU_constant(&style),
                                  GPU_kernel_globals(),
                                  GPU_shading_data());
   if (ok) {
@@ -1070,11 +1082,12 @@ void register_node_type_sh_enso_hair_highlight()
   sh_node_type_base(&ntype, "ShaderNodeEnsoHairHighlight"_ustr);
   ntype.ui_name = "Ensō Hair Highlight";
   ntype.ui_description =
-      "Anime hair highlight drawn like a painted one: a few tall, jagged marks that run along "
-      "their strands and light up around the reflection of the light. Made from the hair "
-      "strand data, no image needed (EEVEE)";
+      "The band of light across anime hair, drawn the way illustrators draw it: spikes, "
+      "triangles, blocks, lines or a mix, cut along the strands. Made from the hair strand "
+      "data, no image needed (EEVEE)";
   ntype.nclass = NODE_CLASS_INPUT;
   ntype.declare = file_ns::node_declare;
+  ntype.draw_buttons = file_ns::node_buts;
   ntype.gpu_fn = file_ns::node_gpu;
   ntype.default_width = 180.0f;
   bke::node_register_type(ntype);

@@ -6278,6 +6278,25 @@ static void def_sh_tex_coord(BlenderRNA * /*brna*/, StructRNA *srna)
   RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
 }
 
+static void def_sh_enso_hair_highlight(BlenderRNA * /*brna*/, StructRNA *srna)
+{
+  static const EnumPropertyItem style_items[] = {
+      {0, "SPIKES", 0, "Spikes", "A toothed band: slivers pointed at the top and the bottom"},
+      {1, "TRIANGLES", 0, "Triangles", "Slivers flat on top and pointed at the bottom"},
+      {2, "BLOCKS", 0, "Blocks", "Slivers with flat ends, like painted rectangles"},
+      {3, "LINES", 0, "Lines", "Thin, long streaks"},
+      {4, "MIX", 0, "Mix", "Every sliver has another shape, for a loose hand-drawn look"},
+      {0, nullptr, 0, nullptr, nullptr},
+  };
+  PropertyRNA *prop;
+
+  prop = RNA_def_property(srna, "style", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, nullptr, "custom1");
+  RNA_def_property_enum_items(prop, style_items);
+  RNA_def_property_ui_text(prop, "Style", "Shape of the slivers the highlight is made of");
+  RNA_def_property_update(prop, NC_NODE | NA_EDITED, "rna_Node_update");
+}
+
 static void def_sh_enso_light_select(BlenderRNA * /*brna*/, StructRNA *srna)
 {
   PropertyRNA *prop;
@@ -10983,7 +11002,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("ShaderNode", "ShaderNodeEnsoLightSelect", def_sh_enso_light_select);
   define("ShaderNode", "ShaderNodeEnsoMask");
   define("ShaderNode", "ShaderNodeEnsoPartTags");
-  define("ShaderNode", "ShaderNodeEnsoHairHighlight");
+  define("ShaderNode", "ShaderNodeEnsoHairHighlight", def_sh_enso_hair_highlight);
   define("ShaderNode", "ShaderNodeEnsoHairShadow");
   define("ShaderNode", "ShaderNodeEnsoShadeInfo");
   define("ShaderNode", "ShaderNodeEnsoHighlight");
