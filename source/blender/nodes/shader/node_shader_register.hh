@@ -62,6 +62,7 @@ void register_node_type_sh_enso_light_select();
 void register_node_type_sh_enso_mask();
 void register_node_type_sh_enso_part_tags();
 void register_node_type_sh_enso_hair_highlight();
+void register_node_type_sh_enso_hair_shadow();
 void register_node_type_sh_enso_shade_info();
 void register_node_type_sh_enso_highlight();
 void register_node_type_sh_enso_light_rim();

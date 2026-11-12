@@ -10984,6 +10984,7 @@ static void rna_def_nodes(BlenderRNA *brna)
   define("ShaderNode", "ShaderNodeEnsoMask");
   define("ShaderNode", "ShaderNodeEnsoPartTags");
   define("ShaderNode", "ShaderNodeEnsoHairHighlight");
+  define("ShaderNode", "ShaderNodeEnsoHairShadow");
   define("ShaderNode", "ShaderNodeEnsoShadeInfo");
   define("ShaderNode", "ShaderNodeEnsoHighlight");
   define("ShaderNode", "ShaderNodeEnsoLightRim");

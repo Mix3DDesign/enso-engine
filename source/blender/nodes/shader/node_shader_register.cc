@@ -66,6 +66,7 @@ void register_shader_nodes()
   register_node_type_sh_enso_mask();
   register_node_type_sh_enso_part_tags();
   register_node_type_sh_enso_hair_highlight();
+  register_node_type_sh_enso_hair_shadow();
   register_node_type_sh_enso_shade_info();
   register_node_type_sh_enso_highlight();
   register_node_type_sh_enso_light_rim();

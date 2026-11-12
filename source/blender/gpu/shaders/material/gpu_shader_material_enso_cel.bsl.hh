@@ -478,40 +478,188 @@ void node_enso_attribute_uv(float4 uv_attr, float3 &uv)
   uv = uv_attr.xyz;
 }
 
-/* Ensō Hair Highlight: the anime hair highlight drawn along the hair's own UVs. The band sits
- * at a height along the strands (V), slides with the view and the light, and its edge is cut
- * into teeth across the strands (U). A highlight map limits where it may appear. */
+/* ------------------------------------------------------------------------------------------ */
+/* Ensō hair strands.
+ *
+ * Anime hair shading needs to know, at every point of the hair, which strand it is on, how far
+ * across that strand it is and how far from the root. Games paint or bake that into a hair map.
+ * Here it comes from the mesh: "Make Hair Strand Data" writes a UV map named "Enso Hair Strand"
+ * (U across the strand, V from root to tip) and a random value per strand ("enso_strand").
+ * Without that data the active UV map is cut into a number of even strands along U. */
+void enso_hair_strand(float4 strand_uv,
+                      float4 strand_id,
+                      float4 uv,
+                      float strands,
+                      float &across,
+                      float &along,
+                      float &id)
+{
+  if (strand_id.x > 0.0f) {
+    across = saturate(strand_uv.x);
+    along = saturate(strand_uv.y);
+    id = strand_id.x;
+  }
+  else {
+    float x = uv.x * max(floor(strands + 0.5f), 1.0f);
+    across = fract(x);
+    /* Roots at the top of the UV map. */
+    along = saturate(1.0f - uv.y);
+    id = 0.05f + 0.95f * fract(sin((floor(x) + 3.0f) * 12.9898f) * 43758.5453f);
+  }
+}
+
+/* The hair map made on the fly: a ridge across every strand, high in the middle and zero at the
+ * edges, with its own height per strand and finer ridges inside it. Added to the light, it pulls
+ * the shadow edge into points that follow the strands. */
+float enso_hair_strand_map(float across, float along, float id, float variation, float detail)
+{
+  float d = saturate(detail);
+  /* The ridge wanders a little from side to side on its way down, like a lock of hair. */
+  float x = saturate(across + 0.1f * d * sin(along * 9.0f + id * 40.0f) *
+                                  (1.0f - abs(across * 2.0f - 1.0f)));
+  float ridge = 1.0f - abs(x * 2.0f - 1.0f);
+  float g = pow(ridge, 0.8f) * (1.0f - saturate(variation) * fract(id * 7.31f));
+  float count = 2.0f + floor(fract(id * 13.7f) * 3.0f);
+  float xf = x * count + fract(id * 5.3f);
+  float fine = 1.0f - abs(fract(xf) * 2.0f - 1.0f);
+  float fine_height = 0.4f + 0.6f * fract(sin((floor(xf) + id * 17.0f) * 12.9898f) * 43758.5453f);
+  g = mix(g, g * (0.3f + 0.7f * fine * fine_height), d);
+  /* And it is not the same height all the way: flame shapes instead of straight stripes. */
+  g *= 1.0f - 0.35f * d * (0.5f + 0.5f * sin(along * 14.0f + id * 71.0f));
+  return saturate(g);
+}
+
+/* Ensō Hair Shadow: the light on the hair with the strand map added, cut into light and shadow.
+ * The shadow follows the light and its edge breaks into strand shaped points. */
 [[node]]
-void node_enso_hair_highlight(float3 uv,
-                              float map,
-                              float position,
-                              float width,
-                              float view_shift,
-                              float light_shift,
+void node_enso_hair_shadow(float map,
+                           float3 light_dir,
+                           float map_strength,
+                           float neutral,
+                           float bias,
+                           float softness,
+                           float variation,
+                           float detail,
+                           float strands,
+                           float edge_px,
+                           float3 N,
+                           float4 strand_uv,
+                           float4 strand_id,
+                           float4 uv,
+                           float use_map,
+                           float &lit,
+                           float &strand_map,
+                           float &strand)
+{
+  float across;
+  float along;
+  float id;
+  enso_hair_strand(strand_uv, strand_id, uv, strands, across, along, id);
+  strand = id;
+  strand_map = (use_map > 0.5f) ? map :
+                                  enso_hair_strand_map(across, along, id, variation, detail);
+  float3 L = enso_cel_normalize(light_dir, float3(0.0f, 0.0f, 1.0f));
+  float3 Nn = enso_cel_normalize(N, float3(0.0f, 0.0f, 1.0f));
+  float value = dot(Nn, L) + (strand_map - neutral) * map_strength;
+  lit = (dot(light_dir, light_dir) > 1e-8f) ? enso_cel_step(bias, value, softness, edge_px) :
+                                               0.0f;
+}
+
+float enso_hair_hash(float x)
+{
+  return fract(sin(x * 12.9898f) * 43758.5453f);
+}
+
+/* Ensō Hair Highlight: the highlight of anime hair the way it is painted in a hair map, made on
+ * the fly. A few strands carry a mark. A mark is tall and thin, runs along its strand and has a
+ * jagged top and bottom, like a small bolt of lightning. The marks stay where they are on the
+ * hair; a ring around the reflection of the light decides how bright they are, so they come and
+ * go as the light and the camera move. */
+[[node]]
+void node_enso_hair_highlight(float map,
                               float3 light_dir,
-                              float teeth,
-                              float teeth_size,
-                              float along_u,
+                              float position,
+                              float length_in,
+                              float jagged,
+                              float points,
+                              float coverage,
+                              float stroke,
+                              float ring_size,
+                              float ring_softness,
+                              float intensity,
+                              float view_shift,
+                              float along_strand,
+                              float3 center,
+                              float strands,
                               float softness,
                               float edge_px,
+                              float3 N,
+                              float4 strand_uv,
+                              float4 strand_id,
+                              float4 uv,
+                              float4 center_prop,
+                              float use_map,
                               [[resource_table]] KernelGlobals &kg,
                               ShadingData &sd,
                               float &highlight,
-                              float &band)
+                              float &marks,
+                              float &strand)
 {
-  float v = (along_u > 0.5f) ? uv.x : uv.y;
-  float u = (along_u > 0.5f) ? uv.y : uv.x;
+  float across;
+  float along;
+  float id;
+  enso_hair_strand(strand_uv, strand_id, uv, strands, across, along, id);
+  strand = id;
+  ObjectMatrices obm = kg.object_matrices_get(sd);
+  /* Where on the hair the marks sit: at a height on the head measured down from the top (so
+   * they line up around the head whatever the length of each strand), or at a distance from
+   * the root of each strand. The height needs the head centre: the node's Center, or the one
+   * Make Hair Strand Data stored on the object. */
+  float t = along;
+  if (dot(center, center) > 0.0f || center_prop.w > 0.5f) {
+    float3 c = (dot(center, center) > 0.0f) ? center : center_prop.xyz;
+    float3 Po = (obm.model_inverse * float4(sd.P, 1.0f)).xyz;
+    float3 up_dir = enso_cel_normalize(Po - c, float3(0.0f, 0.0f, 1.0f));
+    t = mix((1.0f - up_dir.z) * 0.5f, along, saturate(along_strand));
+  }
   float3 V = coordinate_impl(kg, sd, sd.P, sd.N).incoming;
   float3 L = enso_cel_normalize(light_dir, float3(0.0f, 0.0f, 1.0f));
-  /* Looking from above or lighting from above moves the band down the hair, like a real
-   * reflection would. */
-  float center = position - view_shift * 0.5f * V.z - light_shift * 0.5f * L.z;
-  float tri = abs(fract(u * max(teeth, 0.0f)) - 0.5f) * 2.0f;
-  float half_width = max(width, 0.0f) * 0.5f *
-                     (1.0f - saturate(teeth_size) * (1.0f - tri) * ((teeth > 0.0f) ? 1.0f : 0.0f));
-  float inside = half_width - abs(v - center);
-  band = enso_cel_step(0.0f, inside, softness * max(width, 1e-4f), edge_px);
-  highlight = band * saturate(map);
+  float3 Nn = enso_cel_normalize(N, float3(0.0f, 0.0f, 1.0f));
+  /* Looking from above moves the marks down the hair a little, like a reflection. */
+  float place = position + view_shift * 0.5f * V.z;
+  float len = max(length_in, 0.0f);
+  float jag = saturate(jagged);
+
+  /* The mark of this strand: its top and bottom edge are broken lines through a few points
+   * across the strand, each point with its own height and its own length. Both ends close to
+   * a point. */
+  float xs = (across - 0.5f) / max(stroke, 1e-3f) + 0.5f;
+  float mark = 0.0f;
+  if (xs > 0.0f && xs < 1.0f) {
+    float k = max(floor(points + 0.5f), 1.0f);
+    float xk = xs * k;
+    float j = floor(xk);
+    float f = xk - j;
+    float e0 = max(1.0f - abs(2.0f * j / k - 1.0f), 0.0f);
+    float e1 = max(1.0f - abs(2.0f * (j + 1.0f) / k - 1.0f), 0.0f);
+    float c0 = (enso_hair_hash(id * 97.0f + j * 13.1f) - 0.5f) * jag * len * 1.4f;
+    float c1 = (enso_hair_hash(id * 97.0f + (j + 1.0f) * 13.1f) - 0.5f) * jag * len * 1.4f;
+    float l0 = len * e0 * mix(1.0f, 0.25f + 1.1f * enso_hair_hash(id * 57.0f + j * 7.7f), jag);
+    float l1 = len * e1 *
+               mix(1.0f, 0.25f + 1.1f * enso_hair_hash(id * 57.0f + (j + 1.0f) * 7.7f), jag);
+    float own = (fract(id * 37.3f) - 0.5f) * jag * len * 0.8f;
+    float inside = mix(l0, l1, f) * 0.5f - abs(t - (place + own + mix(c0, c1, f)));
+    mark = enso_cel_step(0.0f, inside, softness * max(len, 1e-4f), edge_px);
+  }
+  marks = mark * step(1.0f - saturate(coverage), fract(id * 91.7f));
+  /* The ring: full strength where the surface mirrors the light into the camera, fading out
+   * around it. */
+  float3 H = enso_cel_normalize(L + V, Nn);
+  float edge = 1.0f - saturate(ring_size);
+  float ring = (dot(light_dir, light_dir) > 1e-8f) ?
+                   smoothstep(edge - max(ring_softness, 1e-4f), edge, dot(Nn, H)) :
+                   0.0f;
+  highlight = ((use_map > 0.5f) ? saturate(map) : marks) * ring * max(intensity, 0.0f);
 }
 
 /* Ensō passes: running value of each pass for the pixel being shaded. A node inside the light

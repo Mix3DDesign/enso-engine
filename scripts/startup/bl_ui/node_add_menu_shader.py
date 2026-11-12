@@ -589,6 +589,7 @@ class NODE_MT_shader_node_npr_base(node_add_menu.NodeMenu):
         self.node_operator(layout, "ShaderNodeEnsoFaceShadow", poll=eevee, icon_value=ic("face"))
         self.node_operator(layout, "ShaderNodeEnsoFaceMap", poll=eevee, icon_value=ic("facemap"))
         self.node_operator(layout, "ShaderNodeEnsoHairRing", poll=eevee, icon_value=ic("hair"))
+        self.node_operator(layout, "ShaderNodeEnsoHairShadow", poll=eevee, icon_value=ic("hair"))
         self.node_operator(layout, "ShaderNodeEnsoHairHighlight", poll=eevee, icon_value=ic("hairhi"))
         layout.operator("object.enso_bake_face_map", text="Bake Face Map...", icon_value=ic("facemap"))
         layout.separator()

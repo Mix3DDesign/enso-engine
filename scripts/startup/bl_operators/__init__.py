@@ -22,6 +22,8 @@ _modules = [
     "copy_global_transform",
     "enso_dlc",
     "enso_face_map",
+    "enso_hair",
+    "enso_handoff",
     "enso_passes",
     "enso_theme",
     "enso_workspaces",
@@ -70,6 +72,8 @@ def register():
         copy_global_transform,
         enso_dlc,
         enso_face_map,
+        enso_hair,
+        enso_handoff,
         enso_passes,
         enso_theme,
         enso_workspaces,
@@ -83,6 +87,8 @@ def register():
     copy_global_transform.register()
     enso_dlc.register()
     enso_face_map.register()
+    enso_hair.register()
+    enso_handoff.register()
     enso_theme.register()
     enso_workspaces.register()
 
@@ -94,6 +100,8 @@ def unregister():
         copy_global_transform,
         enso_dlc,
         enso_face_map,
+        enso_hair,
+        enso_handoff,
         enso_passes,
         enso_theme,
         enso_workspaces,
@@ -103,6 +111,8 @@ def unregister():
     copy_global_transform.unregister()
     enso_dlc.unregister()
     enso_face_map.unregister()
+    enso_hair.unregister()
+    enso_handoff.unregister()
     enso_theme.unregister()
     enso_workspaces.unregister()
 

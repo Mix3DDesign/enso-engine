@@ -791,68 +791,84 @@ void register_node_type_sh_enso_light_rim()
   bke::node_register_type(ntype);
 }
 
-/* -------------------------------------------------------------------- Ensō Hair Highlight */
-namespace nodes::node_shader_enso_hair_highlight_cc {
+/* -------------------------------------------------------------------- Ensō hair strands */
+
+/* Mesh data written by "Make Hair Strand Data": the strand UV map, the random value per strand
+ * and the active UV map as the fallback. */
+static void enso_hair_strand_links(GPUMaterial *mat,
+                                   GPUNodeLink **r_strand_uv,
+                                   GPUNodeLink **r_strand_id,
+                                   GPUNodeLink **r_uv)
+{
+  *r_strand_uv = GPU_attribute(mat, CD_AUTO_FROM_NAME, "Enso Hair Strand");
+  *r_strand_id = GPU_attribute(mat, CD_AUTO_FROM_NAME, "enso_strand");
+  *r_uv = GPU_attribute(mat, CD_AUTO_FROM_NAME, "");
+}
+
+/* -------------------------------------------------------------------- Ensō Hair Shadow */
+namespace nodes::node_shader_enso_hair_shadow_cc {
 
 static void node_declare(NodeDeclarationBuilder &b)
 {
-  b.add_input<decl::Vector>("UV"_ustr)
+  b.add_input<decl::Float>("Map"_ustr)
+      .default_value(0.5f)
       .hide_value()
-      .description("UVs of the hair, laid out so the strands run along V (root to tip). "
-                   "Unconnected, the active UV map is used");
-  b.add_input<decl::Float>("Highlight Map"_ustr)
-      .default_value(1.0f)
-      .min(0.0f)
-      .max(1.0f)
-      .subtype(PROP_FACTOR)
-      .description("Painted map of where the highlight may appear (an HM map). White everywhere "
-                   "when unconnected");
-  b.add_input<decl::Float>("Position"_ustr)
-      .default_value(0.55f)
-      .min(0.0f)
-      .max(1.0f)
-      .subtype(PROP_FACTOR)
-      .description("Where along the strands the highlight sits");
-  b.add_input<decl::Float>("Width"_ustr).default_value(0.12f).min(0.0f).max(1.0f).subtype(
-      PROP_FACTOR);
-  b.add_input<decl::Float>("View Shift"_ustr)
-      .default_value(0.25f)
-      .min(-1.0f)
-      .max(1.0f)
-      .description("How far the highlight slides along the hair as the camera goes up and down");
-  b.add_input<decl::Float>("Light Shift"_ustr)
-      .default_value(0.15f)
-      .min(-1.0f)
-      .max(1.0f)
-      .description("How far the highlight slides as the light goes up and down");
+      .description("Your own hair map (the green of an HM map). Unconnected, the node makes "
+                   "the map itself from the hair strand data, with no image");
   b.add_input<decl::Vector>("Light Direction"_ustr)
-      .default_value({0.0f, -0.5f, 0.85f})
-      .description("Direction toward the light, for example from Ensō Light Select");
-  b.add_input<decl::Float>("Teeth"_ustr)
-      .default_value(24.0f)
+      .default_value({-0.4f, -0.5f, 0.75f})
+      .description("Direction toward the light, for example the Direction of Ensō Light Select");
+  b.add_input<decl::Float>("Map Strength"_ustr)
+      .default_value(1.6f)
       .min(0.0f)
-      .max(400.0f)
-      .description("Number of teeth across the hair (along U). 0 gives a plain band");
-  b.add_input<decl::Float>("Teeth Size"_ustr)
-      .default_value(0.7f)
+      .max(8.0f)
+      .description("How far the strands pull the shadow edge into points. 0 is a plain edge");
+  b.add_input<decl::Float>("Neutral Gray"_ustr)
+      .default_value(0.29f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How deep the teeth cut into the band");
-  b.add_input<decl::Float>("Along U"_ustr)
-      .default_value(0.0f)
+      .description("Map value that leaves the light as it is. Brighter parts of the map gain "
+                   "light, darker parts lose it");
+  b.add_input<decl::Float>("Shadow Bias"_ustr)
+      .default_value(0.11f)
+      .min(-1.0f)
+      .max(1.0f)
+      .description("Where the shadow starts. Higher makes the shadow bigger");
+  b.add_input<decl::Float>("Softness"_ustr).default_value(0.06f).min(0.0f).max(1.0f).subtype(
+      PROP_FACTOR);
+  b.add_input<decl::Float>("Variation"_ustr)
+      .default_value(0.5f)
       .min(0.0f)
       .max(1.0f)
-      .description("Set to 1 when the strands run along U instead of V in the UV map");
-  b.add_input<decl::Float>("Softness"_ustr).default_value(0.0f).min(0.0f).max(1.0f).subtype(
-      PROP_FACTOR);
+      .subtype(PROP_FACTOR)
+      .description("How different the strands are from each other, so the points have "
+                   "different lengths");
+  b.add_input<decl::Float>("Detail"_ustr)
+      .default_value(0.4f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("Finer points inside every strand");
+  b.add_input<decl::Float>("Strands"_ustr)
+      .default_value(24.0f)
+      .min(1.0f)
+      .max(400.0f)
+      .description("Only used on hair without strand data: the number of even strands the "
+                   "active UV map is cut into along U");
   b.add_input<decl::Float>("Edge Pixels"_ustr)
       .default_value(1.5f)
       .min(0.0f)
       .max(16.0f)
       .description("Width of the smoothed edge in screen pixels");
-  b.add_output<decl::Float>("Highlight"_ustr).description("The highlight, inside the map");
-  b.add_output<decl::Float>("Band"_ustr).description("The highlight before the map");
+  b.add_input<decl::Vector>("Normal"_ustr)
+      .hide_value()
+      .description("Plug in Ensō Smooth Normals for one clean shadow over the whole hair");
+  b.add_output<decl::Float>("Lit"_ustr).description("1 in the light, 0 in the shadow");
+  b.add_output<decl::Float>("Strand Map"_ustr)
+      .description("The hair map the node uses: a ridge across every strand");
+  b.add_output<decl::Float>("Strand"_ustr)
+      .description("Random value per strand, for color variation");
 }
 
 static int node_gpu(GPUMaterial *mat,
@@ -861,14 +877,184 @@ static int node_gpu(GPUMaterial *mat,
                     GPUNodeStack *in,
                     GPUNodeStack *out)
 {
-  if (!in[0].link) {
-    GPU_link(mat,
-             "node_enso_attribute_uv",
-             GPU_attribute(mat, CD_AUTO_FROM_NAME, ""),
-             &in[0].link);
+  const float use_map = in[0].link ? 1.0f : 0.0f;
+  if (!in[10].link) {
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[10].link);
   }
-  const bool ok = GPU_stack_link(
-      mat, node, "node_enso_hair_highlight", in, out, GPU_kernel_globals(), GPU_shading_data());
+  GPUNodeLink *strand_uv, *strand_id, *uv;
+  enso_hair_strand_links(mat, &strand_uv, &strand_id, &uv);
+  const bool ok = GPU_stack_link(mat,
+                                 node,
+                                 "node_enso_hair_shadow",
+                                 in,
+                                 out,
+                                 strand_uv,
+                                 strand_id,
+                                 uv,
+                                 GPU_constant(&use_map));
+  if (ok) {
+    enso_pass_write(mat, "Enso Cel", out[0].link);
+  }
+  return ok;
+}
+
+}  // namespace nodes::node_shader_enso_hair_shadow_cc
+
+void register_node_type_sh_enso_hair_shadow()
+{
+  namespace file_ns = nodes::node_shader_enso_hair_shadow_cc;
+  static bke::bNodeType ntype;
+  sh_node_type_base(&ntype, "ShaderNodeEnsoHairShadow"_ustr);
+  ntype.ui_name = "Ensō Hair Shadow";
+  ntype.ui_description =
+      "Anime hair shadow that follows the light, with an edge that breaks into strand shaped "
+      "points. The hair map is made from the hair strand data, no image needed (EEVEE)";
+  ntype.nclass = NODE_CLASS_INPUT;
+  ntype.declare = file_ns::node_declare;
+  ntype.gpu_fn = file_ns::node_gpu;
+  ntype.default_width = 180.0f;
+  bke::node_register_type(ntype);
+}
+
+/* -------------------------------------------------------------------- Ensō Hair Highlight */
+namespace nodes::node_shader_enso_hair_highlight_cc {
+
+static void node_declare(NodeDeclarationBuilder &b)
+{
+  b.add_input<decl::Float>("Highlight Map"_ustr)
+      .default_value(1.0f)
+      .hide_value()
+      .description("Your own painted highlights (the red of an HM map). Unconnected, the node "
+                   "draws the marks itself from the hair strand data");
+  b.add_input<decl::Vector>("Light Direction"_ustr)
+      .default_value({0.0f, -0.5f, 0.85f})
+      .description("Direction toward the light, for example from Ensō Light Select");
+  b.add_input<decl::Float>("Position"_ustr)
+      .default_value(0.3f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("Where the marks sit, measured down from the top of the head: 0 is the "
+                   "very top, 0.5 is level with the head centre");
+  b.add_input<decl::Float>("Length"_ustr)
+      .default_value(0.2f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("How tall the marks are, along the strand");
+  b.add_input<decl::Float>("Jagged"_ustr)
+      .default_value(0.75f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("How broken the top and bottom of a mark are. 0 gives smooth leaf shapes");
+  b.add_input<decl::Float>("Points"_ustr)
+      .default_value(3.0f)
+      .min(1.0f)
+      .max(16.0f)
+      .description("Number of spikes in one mark");
+  b.add_input<decl::Float>("Coverage"_ustr)
+      .default_value(0.3f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("How many of the strands carry a mark");
+  b.add_input<decl::Float>("Mark Width"_ustr)
+      .default_value(0.4f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("How much of the width of a strand a mark covers");
+  b.add_input<decl::Float>("Ring Size"_ustr)
+      .default_value(0.5f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("How far around the reflection of the light the marks show. 1 shows them "
+                   "all the time");
+  b.add_input<decl::Float>("Ring Softness"_ustr)
+      .default_value(0.2f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("How gently the marks fade at the edge of the ring");
+  b.add_input<decl::Float>("Intensity"_ustr).default_value(1.0f).min(0.0f).max(10.0f);
+  b.add_input<decl::Float>("View Shift"_ustr)
+      .default_value(0.1f)
+      .min(-1.0f)
+      .max(1.0f)
+      .description("How far the marks slide down the hair as the camera goes up");
+  b.add_input<decl::Float>("Along Strand"_ustr)
+      .default_value(0.0f)
+      .min(0.0f)
+      .max(1.0f)
+      .subtype(PROP_FACTOR)
+      .description("0 places the marks by height on the head, so they line up around it. 1 "
+                   "places them by distance from the root of each strand");
+  b.add_input<decl::Vector>("Center"_ustr)
+      .default_value({0.0f, 0.0f, 0.0f})
+      .subtype(PROP_XYZ)
+      .description("Centre of the head in the object's own space. Left at zero, the centre "
+                   "stored by Make Hair Strand Data is used");
+  b.add_input<decl::Float>("Strands"_ustr)
+      .default_value(24.0f)
+      .min(1.0f)
+      .max(400.0f)
+      .description("Only used on hair without strand data: the number of even strands the "
+                   "active UV map is cut into along U");
+  b.add_input<decl::Float>("Softness"_ustr).default_value(0.0f).min(0.0f).max(1.0f).subtype(
+      PROP_FACTOR);
+  b.add_input<decl::Float>("Edge Pixels"_ustr)
+      .default_value(1.5f)
+      .min(0.0f)
+      .max(16.0f)
+      .description("Width of the smoothed edge in screen pixels");
+  b.add_input<decl::Vector>("Normal"_ustr)
+      .hide_value()
+      .description("Plug in Ensō Smooth Normals so the ring is one clean shape");
+  b.add_output<decl::Float>("Highlight"_ustr)
+      .description("The marks, as bright as the ring lets them be");
+  b.add_output<decl::Float>("Marks"_ustr).description("The marks alone, always on");
+  b.add_output<decl::Float>("Strand"_ustr)
+      .description("Random value per strand, for color variation");
+}
+
+static int node_gpu(GPUMaterial *mat,
+                    bNode *node,
+                    bNodeExecData * /*execdata*/,
+                    GPUNodeStack *in,
+                    GPUNodeStack *out)
+{
+  const float use_map = in[0].link ? 1.0f : 0.0f;
+  if (!in[17].link) {
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[17].link);
+  }
+  GPUNodeLink *strand_uv, *strand_id, *uv;
+  enso_hair_strand_links(mat, &strand_uv, &strand_id, &uv);
+  /* Head centre stored on the object by Make Hair Strand Data. */
+  float attr_hash = 0.0f;
+  GPUNodeLink *center_raw = GPU_uniform_attribute(
+      mat, "enso_hair_center", false, reinterpret_cast<uint32_t *>(&attr_hash));
+  GPUNodeLink *center_prop = nullptr;
+  GPU_link(mat,
+           "node_attribute_uniform",
+           center_raw,
+           GPU_constant(&attr_hash),
+           GPU_kernel_globals(),
+           GPU_shading_data(),
+           &center_prop);
+  const bool ok = GPU_stack_link(mat,
+                                 node,
+                                 "node_enso_hair_highlight",
+                                 in,
+                                 out,
+                                 strand_uv,
+                                 strand_id,
+                                 uv,
+                                 center_prop,
+                                 GPU_constant(&use_map),
+                                 GPU_kernel_globals(),
+                                 GPU_shading_data());
   if (ok) {
     enso_pass_write(mat, "Enso Hair Ring", out[0].link);
   }
@@ -884,8 +1070,9 @@ void register_node_type_sh_enso_hair_highlight()
   sh_node_type_base(&ntype, "ShaderNodeEnsoHairHighlight"_ustr);
   ntype.ui_name = "Ensō Hair Highlight";
   ntype.ui_description =
-      "Anime hair highlight that follows the hair's UVs: a toothed band along the strands that "
-      "slides with the camera and the light, limited by a painted highlight map (EEVEE)";
+      "Anime hair highlight drawn like a painted one: a few tall, jagged marks that run along "
+      "their strands and light up around the reflection of the light. Made from the hair "
+      "strand data, no image needed (EEVEE)";
   ntype.nclass = NODE_CLASS_INPUT;
   ntype.declare = file_ns::node_declare;
   ntype.gpu_fn = file_ns::node_gpu;
