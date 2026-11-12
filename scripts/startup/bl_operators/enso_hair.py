@@ -10,6 +10,8 @@ strand is along its length, and writes:
 
   "Enso Hair Strand"   UV map: U goes across the strand (0 to 1), V from the root (0) to the tip (1)
   "enso_strand"        one random value per strand
+  "enso_strand_around" where around the head the strand line sits (the same value all the way
+                       down a strand, so a highlight drawn with it follows the flow of the hair)
   enso_hair_center     the centre of the head, as a property of the object
 
 The Ensō Hair Shadow and Ensō Hair Highlight nodes read these by name. No image is made.
@@ -21,6 +23,7 @@ from bpy.types import Operator
 
 STRAND_UV = "Enso Hair Strand"
 STRAND_ID = "enso_strand"
+STRAND_AROUND = "enso_strand_around"
 CENTER_PROP = "enso_hair_center"
 BINS = 16
 
@@ -68,7 +71,7 @@ def _islands(np, me, uv, by_uv):
     return label, loop_poly, loop_vert
 
 
-def make_strand_data(obj, crown_world, by_uv=True, flip=False):
+def make_strand_data(obj, crown_world, centre_world, by_uv=True, flip=False):
     """Write the strand UV map and the per-strand value. Returns the number of strands."""
     np = _np()
     me = obj.data
@@ -92,8 +95,10 @@ def make_strand_data(obj, crown_world, by_uv=True, flip=False):
     world = co @ mw[:3, :3].T + mw[:3, 3]
     crown = np.array(crown_world, dtype=np.float64)
 
+    centre_local = (np.array(centre_world, dtype=np.float64) - mw[:3, 3]) @ np.linalg.inv(mw[:3, :3]).T
     out_uv = np.zeros((n_loops, 2), dtype=np.float64)
     out_id = np.zeros(n_loops, dtype=np.float64)
+    out_around = np.zeros(n_loops, dtype=np.float64)
     loop_label = label[loop_poly]
     order = np.argsort(loop_label, kind='stable')
     sorted_labels = loop_label[order]
@@ -145,6 +150,25 @@ def make_strand_data(obj, crown_world, by_uv=True, flip=False):
             cn = np.where(ok, (c - lo_i) / np.where(ok, width, 1.0), 0.5)
             out_uv[idx, 0] = np.clip(cn, 0.0, 1.0)
             out_uv[idx, 1] = an
+        # Where around the head each strand line sits, measured in the upper part of the hair
+        # where the highlight is, and kept the same all the way down the line.
+        rel = co[loop_vert[idx]] - centre_local
+        dist = np.linalg.norm(rel, axis=1)
+        dist[dist < 1e-9] = 1.0
+        down = (1.0 - rel[:, 2] / dist) * 0.5
+        az = np.arctan2(rel[:, 1], rel[:, 0])
+        sel = (down > 0.12) & (down < 0.5)
+        if sel.sum() < 3:
+            sel = np.ones(len(idx), dtype=bool)
+        mid = np.arctan2(np.sin(az[sel]).mean(), np.cos(az[sel]).mean())
+        turn = (az - mid + np.pi) % (2.0 * np.pi) - np.pi
+        cn_all = out_uv[idx, 0]
+        if np.var(cn_all[sel]) > 1e-6:
+            slope, base = np.polyfit(cn_all[sel], turn[sel], 1)
+        else:
+            slope, base = 0.0, float(turn[sel].mean())
+        # Kept unwrapped (and above zero) so a strand on the seam at the back stays in one piece.
+        out_around[idx] = (mid + base + slope * cn_all) / (2.0 * np.pi) + 1.5
         # The same strand gets the same value every time the data is made.
         seed = int(idx.min()) * 2654435761 % 4294967296
         out_id[idx] = 0.05 + 0.95 * (((seed ^ (seed >> 13)) * 1274126177 % 4294967296) / 4294967296.0)
@@ -168,6 +192,13 @@ def make_strand_data(obj, crown_world, by_uv=True, flip=False):
     if attr is None:
         attr = me.attributes.new(STRAND_ID, 'FLOAT', 'CORNER')
     attr.data.foreach_set("value", out_id.astype(np.float32))
+    attr = me.attributes.get(STRAND_AROUND)
+    if attr is not None and (attr.domain != 'CORNER' or attr.data_type != 'FLOAT'):
+        me.attributes.remove(attr)
+        attr = None
+    if attr is None:
+        attr = me.attributes.new(STRAND_AROUND, 'FLOAT', 'CORNER')
+    attr.data.foreach_set("value", out_around.astype(np.float32))
     me.update()
     return len(groups)
 
@@ -302,7 +333,8 @@ class OBJECT_OT_enso_hair_strands(Operator):
         added = 0
         try:
             for ob in objs:
-                total += make_strand_data(ob, crown, by_uv=(self.islands == 'UV'), flip=self.flip)
+                total += make_strand_data(ob, crown, centre, by_uv=(self.islands == 'UV'),
+                                          flip=self.flip)
                 local = ob.matrix_world.inverted() @ Vector(centre)
                 ob[CENTER_PROP] = (local.x, local.y, local.z, 1.0)
                 ob.update_tag()

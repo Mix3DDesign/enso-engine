@@ -671,6 +671,7 @@ void node_enso_hair_highlight(float map,
                               float4 strand_id,
                               float4 uv,
                               float4 center_prop,
+                              float4 strand_around,
                               float use_map,
                               float style,
                               [[resource_table]] KernelGlobals &kg,
@@ -701,6 +702,15 @@ void node_enso_hair_highlight(float map,
     t = mix((1.0f - up_dir.z) * 0.5f, along, saturate(along_strand));
     around = atan(up_dir.y, up_dir.x) / 6.2831853f + 0.5f;
     has_center = true;
+  }
+  /* With strand data the band is drawn along the strand lines: the place around the head is the
+   * same all the way down a strand, so the teeth lean and flow with the hair, and every lock
+   * sits a little higher or lower than its neighbours, the way a highlight is inked lock by
+   * lock. */
+  float lock_shift = 0.0f;
+  if (has_center && strand_id.x > 0.0f && strand_around.x > 0.0f) {
+    around = fract(strand_around.x);
+    lock_shift = fract(id * 37.3f) - 0.5f;
   }
   float3 V = coordinate_impl(kg, sd, sd.P, sd.N).incoming;
   float3 L = enso_cel_normalize(light_dir, float3(0.0f, 0.0f, 1.0f));
@@ -768,7 +778,7 @@ void node_enso_hair_highlight(float map,
                                 (has_center ? around : across) * n,
                                 has_center ? n : 1e6f,
                                 has_center ? 0.0f : id * 97.0f,
-                                t - place,
+                                t - place - lock_shift * jag * band_height * 0.3f,
                                 band_height * 0.5f,
                                 cell_width,
                                 jag,
@@ -818,7 +828,7 @@ void node_enso_hair_highlight(float map,
       top *= side;
       bottom *= side;
     }
-    float d = t - place;
+    float d = t - place - lock_shift * jag * band_height * 0.3f;
     float inside = min(bottom * band_height * 0.5f - d, top * band_height * 0.5f + d);
     mark = enso_cel_step(0.0f, inside, softness * max(band_height, 1e-4f) * 3.0f, edge_px);
     r_shown = 0.0f;

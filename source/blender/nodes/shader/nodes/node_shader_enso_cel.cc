@@ -937,18 +937,18 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description("Where the band sits, measured down from the top of the head: 0 is the "
                    "very top, 0.5 is level with the head centre");
   b.add_input<decl::Float>("Height"_ustr)
-      .default_value(0.16f)
+      .default_value(0.22f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
       .description("How tall the band is, teeth included");
   b.add_input<decl::Float>("Teeth"_ustr)
-      .default_value(22.0f)
+      .default_value(40.0f)
       .min(2.0f)
       .max(200.0f)
       .description("Number of teeth, blocks, dots or strokes around the head");
   b.add_input<decl::Float>("Jagged"_ustr)
-      .default_value(0.7f)
+      .default_value(0.8f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
@@ -1076,6 +1076,7 @@ static int node_gpu(GPUMaterial *mat,
                                  strand_id,
                                  uv,
                                  center_prop,
+                                 GPU_attribute(mat, CD_AUTO_FROM_NAME, "enso_strand_around"),
                                  GPU_constant(&use_map),
                                  GPU_constant(&style),
                                  GPU_kernel_globals(),
