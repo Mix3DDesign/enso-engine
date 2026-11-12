@@ -937,11 +937,16 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description("Where the band sits, measured down from the top of the head: 0 is the "
                    "very top, 0.5 is level with the head centre");
   b.add_input<decl::Float>("Height"_ustr)
-      .default_value(0.1f)
+      .default_value(0.16f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How tall the band is");
+      .description("How tall the band is, teeth included");
+  b.add_input<decl::Float>("Teeth"_ustr)
+      .default_value(22.0f)
+      .min(2.0f)
+      .max(200.0f)
+      .description("Number of teeth, blocks, dots or strokes around the head");
   b.add_input<decl::Float>("Jagged"_ustr)
       .default_value(0.7f)
       .min(0.0f)
@@ -953,19 +958,21 @@ static void node_declare(NodeDeclarationBuilder &b)
       .default_value(2.0f)
       .min(1.0f)
       .max(16.0f)
-      .description("Number of slivers across one strand. Use 1 on hair made of many thin "
-                   "strands");
+      .description("Sliver styles: number of slivers across one strand. Use 1 on hair made of "
+                   "many thin strands");
   b.add_input<decl::Float>("Coverage"_ustr)
       .default_value(0.8f)
       .min(0.0f)
       .max(1.0f)
       .subtype(PROP_FACTOR)
-      .description("How many of the slivers are drawn. Lower leaves gaps in the band");
+      .description("Sliver styles: how many of the slivers are drawn. Lower leaves gaps in "
+                   "the band");
   b.add_input<decl::Float>("Width"_ustr)
       .default_value(1.0f)
       .min(0.0f)
       .max(2.0f)
-      .description("Width of the slivers. Lower leaves a gap between them");
+      .description("Zigzag Band: thickness of the band between the teeth. Sliver styles: "
+                   "width of the slivers, lower leaves a gap between them");
   b.add_input<decl::Float>("Ring Size"_ustr)
       .default_value(0.6f)
       .min(0.0f)
@@ -1029,6 +1036,12 @@ static void node_buts(ui::Layout &layout, bContext * /*C*/, PointerRNA *ptr)
   layout.prop(ptr, "style", ui::ITEM_R_SPLIT_EMPTY_NAME, "", ICON_NONE);
 }
 
+static void node_init(bNodeTree * /*ntree*/, bNode *node)
+{
+  /* Zigzag Band. */
+  node->custom1 = 5;
+}
+
 static int node_gpu(GPUMaterial *mat,
                     bNode *node,
                     bNodeExecData * /*execdata*/,
@@ -1037,8 +1050,8 @@ static int node_gpu(GPUMaterial *mat,
 {
   const float use_map = in[0].link ? 1.0f : 0.0f;
   const float style = float(node->custom1);
-  if (!in[17].link) {
-    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[17].link);
+  if (!in[18].link) {
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[18].link);
   }
   GPUNodeLink *strand_uv, *strand_id, *uv;
   enso_hair_strand_links(mat, &strand_uv, &strand_id, &uv);
@@ -1082,11 +1095,12 @@ void register_node_type_sh_enso_hair_highlight()
   sh_node_type_base(&ntype, "ShaderNodeEnsoHairHighlight"_ustr);
   ntype.ui_name = "Ensō Hair Highlight";
   ntype.ui_description =
-      "The band of light across anime hair, drawn the way illustrators draw it: spikes, "
-      "triangles, blocks, lines or a mix, cut along the strands. Made from the hair strand "
-      "data, no image needed (EEVEE)";
+      "The band of light across anime hair, drawn the way illustrators ink it: one zigzag "
+      "band with teeth pointing up and down, or slivers cut along the strands (spikes, "
+      "triangles, blocks, lines, a mix). No image needed (EEVEE)";
   ntype.nclass = NODE_CLASS_INPUT;
   ntype.declare = file_ns::node_declare;
+  ntype.initfunc = file_ns::node_init;
   ntype.draw_buttons = file_ns::node_buts;
   ntype.gpu_fn = file_ns::node_gpu;
   ntype.default_width = 180.0f;

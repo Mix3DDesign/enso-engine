@@ -570,6 +570,76 @@ float enso_hair_hash(float x)
   return fract(sin(x * 12.9898f) * 43758.5453f);
 }
 
+/* Highlight styles that are laid out in cells along the band: `x` runs along the band in cells,
+ * `d` is the distance below the middle of the band and `half_h` half the height of the band, both
+ * in the same unit, and `cell_width` is the width of one cell in that unit. Returns the mark. */
+float enso_hair_cell_style(float style,
+                           float x,
+                           float wrap,
+                           float key,
+                           float d,
+                           float half_h,
+                           float cell_width,
+                           float jag,
+                           float width,
+                           float coverage,
+                           float softness,
+                           float edge_px)
+{
+  float cell = floor(x);
+  float f = x - cell;
+  float h = cell - wrap * floor(cell / wrap);
+  float r1 = enso_hair_hash(h * 13.1f + key + 3.0f);
+  float r2 = enso_hair_hash(h * 7.7f + key + 41.0f);
+  float r3 = enso_hair_hash(h * 5.3f + key + 77.0f);
+  float shown = step(1.0f - saturate(coverage), enso_hair_hash(h * 3.9f + key + 19.0f));
+  float soft = softness * max(half_h, 1e-4f) * 6.0f;
+  float w = max(width, 0.0f);
+  float off = (r1 - 0.5f) * jag * half_h * 0.8f;
+  float inside = -1.0f;
+  if (style < 7.5f) {
+    /* Dots: round blobs of different sizes scattered over the band. */
+    float radius = min(cell_width, half_h * 2.0f) * 0.48f * (0.3f + 0.7f * r3) * w;
+    float2 p = float2((f - (0.5f + (r2 - 0.5f) * 0.4f)) * cell_width, d - (r1 - 0.5f) * half_h * 1.4f);
+    inside = radius - length(p);
+  }
+  else if (style < 8.5f) {
+    /* Horned blocks: blocks pinched in the middle, with a horn at every corner. */
+    float u = abs(f - 0.5f) / (0.43f * min(w, 1.15f));
+    float pinch = 0.28f + 0.72f * u * u;
+    inside = min(half_h * pinch * (1.0f - jag * 0.5f * r2) - abs(d - off), (1.0f - u) * cell_width);
+  }
+  else if (style < 9.5f) {
+    /* Thin line: one fine line that swells into a pointed flare here and there. */
+    float swell = pow(abs(fract(x * 0.23f + 0.37f) * 2.0f - 1.0f), 7.0f);
+    float gap = smoothstep(0.0f, 0.25f, abs(fract(x * 0.37f + r1 * 0.0f) * 2.0f - 1.0f));
+    inside = half_h * (0.07f + 0.9f * swell) * w * mix(1.0f, gap, saturate(1.0f - coverage)) - abs(d);
+    shown = 1.0f;
+  }
+  else if (style < 10.5f) {
+    /* Dashes: a dotted row of small strokes. */
+    float2 p = float2((f - 0.5f) / (0.3f * (0.5f + 0.5f * r3) * w),
+                      (d - off * 0.3f) / max(half_h * 0.28f * (0.6f + 0.8f * r2), 1e-5f));
+    inside = (1.0f - length(p)) * half_h * 0.25f;
+  }
+  else if (style < 11.5f) {
+    /* Slanted blocks: a row of leaning blocks with flat ends. */
+    float lean = f + 0.22f * d / max(half_h, 1e-5f);
+    float u = abs(lean - 0.5f) / (0.36f * min(w, 1.3f));
+    inside = min(half_h * (1.0f - jag * 0.55f * r2) - abs(d - off * 0.5f), (1.0f - u) * cell_width);
+  }
+  else if (style < 12.5f) {
+    /* Band and whiskers: a solid band crossed by thin tall strokes. */
+    float band = half_h * 0.32f * w - abs(d);
+    float reach = half_h * (1.0f + 0.9f * r1);
+    float lean = f + 0.1f * d / max(half_h, 1e-5f);
+    float whisker = (0.07f * (1.0f - abs(d) / max(reach, 1e-5f)) - abs(lean - 0.5f)) * cell_width;
+    inside = max(band, mix(-1.0f, whisker, shown));
+    shown = 1.0f;
+  }
+  return enso_cel_step(0.0f, inside, soft, edge_px) * shown;
+}
+
 /* Ensō Hair Highlight: the band of light across anime hair, drawn the way illustrators draw it.
  *
  * The band sits at a height on the head. Across every strand it is cut into slivers, and each
@@ -582,6 +652,7 @@ void node_enso_hair_highlight(float map,
                               float3 light_dir,
                               float position,
                               float height_in,
+                              float teeth,
                               float jagged,
                               float slivers,
                               float coverage,
@@ -619,11 +690,17 @@ void node_enso_hair_highlight(float map,
    * height needs the head centre: the node's Center, or the one Make Hair Strand Data stored
    * on the object. */
   float t = along;
+  /* Position around the head, 0 to 1, for the zigzag band. Without a head centre it runs
+   * across the strand instead. */
+  float around = across;
+  bool has_center = false;
   if (dot(center, center) > 0.0f || center_prop.w > 0.5f) {
     float3 c = (dot(center, center) > 0.0f) ? center : center_prop.xyz;
     float3 Po = (obm.model_inverse * float4(sd.P, 1.0f)).xyz;
     float3 up_dir = enso_cel_normalize(Po - c, float3(0.0f, 0.0f, 1.0f));
     t = mix((1.0f - up_dir.z) * 0.5f, along, saturate(along_strand));
+    around = atan(up_dir.y, up_dir.x) / 6.2831853f + 0.5f;
+    has_center = true;
   }
   float3 V = coordinate_impl(kg, sd, sd.P, sd.N).incoming;
   float3 L = enso_cel_normalize(light_dir, float3(0.0f, 0.0f, 1.0f));
@@ -680,7 +757,73 @@ void node_enso_hair_highlight(float map,
 
   float u = abs(f - 0.5f) / max(fill * 0.5f, 1e-4f);
   float mark = 0.0f;
-  if (u < 1.0f) {
+  if (style > 6.5f && style < 12.5f) {
+    /* Styles laid out in cells along the band. */
+    float n = max(floor(teeth + 0.5f), 2.0f);
+    /* Width of one cell in the unit of the height: the band is a circle around the head that
+     * gets shorter toward the top. */
+    float cell_width = has_center ? 2.0f * max(sin(saturate(t) * 3.14159265f), 0.05f) / n :
+                                    band_height;
+    mark = enso_hair_cell_style(style,
+                                (has_center ? around : across) * n,
+                                has_center ? n : 1e6f,
+                                has_center ? 0.0f : id * 97.0f,
+                                t - place,
+                                band_height * 0.5f,
+                                cell_width,
+                                jag,
+                                width,
+                                coverage,
+                                softness,
+                                edge_px);
+    r_shown = 2.0f;
+  }
+  else if (style > 4.5f) {
+    /* Zigzag band: one unbroken band around the head. Its top edge is a row of teeth that
+     * point up and its bottom edge a row of teeth that point down, each tooth with its own
+     * length, the way the highlight is inked in a drawing. */
+    /* Fine Zigzag has more and thinner teeth, Grass has dense long blades. */
+    bool fine = style > 5.5f && style < 6.5f;
+    bool grass = style > 12.5f;
+    float n = max(floor(teeth * (fine ? 2.4f : (grass ? 1.8f : 1.0f)) + 0.5f), 2.0f);
+    float xz = (has_center ? around : across) * n * 2.0f;
+    float k0 = floor(xz);
+    float fz = xz - k0;
+    float k1 = k0 + 1.0f;
+    /* The same teeth on both sides of the seam at the back of the head. */
+    float wrap = has_center ? n * 2.0f : 1e6f;
+    float h0 = k0 - wrap * floor(k0 / wrap);
+    float h1 = k1 - wrap * floor(k1 / wrap);
+    float strand_key = has_center ? 0.0f : id * 97.0f;
+    float even0 = 1.0f - (k0 - 2.0f * floor(k0 * 0.5f));
+    float even1 = 1.0f - even0;
+    float core = (fine ? 0.14f : (grass ? 0.06f : 0.25f)) * max(width, 0.0f);
+    float tooth0 = 1.0f - jag * 0.8f * enso_hair_hash(h0 * 13.1f + strand_key + 3.0f);
+    float tooth1 = 1.0f - jag * 0.8f * enso_hair_hash(h1 * 13.1f + strand_key + 3.0f);
+    float low0 = core * (0.4f + 0.6f * enso_hair_hash(h0 * 7.7f + strand_key + 41.0f));
+    float low1 = core * (0.4f + 0.6f * enso_hair_hash(h1 * 7.7f + strand_key + 41.0f));
+    /* Teeth of the top edge stand on the even points, teeth of the bottom edge on the odd
+     * ones, so the band zigzags. */
+    float top = mix(mix(low0, tooth0, even0), mix(low1, tooth1, even1), fz);
+    float bottom = mix(mix(tooth0, low0, even0), mix(tooth1, low1, even1), fz);
+    if (grass) {
+      /* Blades stand on the same points on both sides. */
+      float other0 = 1.0f - jag * 0.8f * enso_hair_hash(h0 * 9.3f + strand_key + 63.0f);
+      float other1 = 1.0f - jag * 0.8f * enso_hair_hash(h1 * 9.3f + strand_key + 63.0f);
+      bottom = mix(mix(low0, other0 * 0.7f, even0), mix(low1, other1 * 0.7f, even1), fz);
+    }
+    if (!has_center) {
+      /* Across a strand: both edges close at the sides of the strand. */
+      float side = saturate(min(across, 1.0f - across) * n * 2.0f);
+      top *= side;
+      bottom *= side;
+    }
+    float d = t - place;
+    float inside = min(bottom * band_height * 0.5f - d, top * band_height * 0.5f + d);
+    mark = enso_cel_step(0.0f, inside, softness * max(band_height, 1e-4f) * 3.0f, edge_px);
+    r_shown = 0.0f;
+  }
+  else if (u < 1.0f) {
     float narrow = 1.0f - taper * u;
     float own_place = place + (r_place - 0.5f) * jag * band_height * 0.9f;
     float own_length = band_height * stretch * (1.0f - jag * 0.7f * r_length);
@@ -691,7 +834,7 @@ void node_enso_hair_highlight(float map,
     mark = enso_cel_step(0.0f, inside, softness * max(band_height, 1e-4f) * 3.0f, edge_px) *
            enso_cel_step(0.0f, 1.0f - u, softness * 2.0f, edge_px);
   }
-  marks = mark * step(1.0f - saturate(coverage), r_shown);
+  marks = mark * ((style > 4.5f) ? 1.0f : step(1.0f - saturate(coverage), r_shown));
   /* The ring: full strength where the surface mirrors the light into the camera, fading out
    * around it. */
   float3 H = enso_cel_normalize(L + V, Nn);

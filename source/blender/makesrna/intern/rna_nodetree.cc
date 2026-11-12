@@ -6281,7 +6281,20 @@ static void def_sh_tex_coord(BlenderRNA * /*brna*/, StructRNA *srna)
 static void def_sh_enso_hair_highlight(BlenderRNA * /*brna*/, StructRNA *srna)
 {
   static const EnumPropertyItem style_items[] = {
-      {0, "SPIKES", 0, "Spikes", "A toothed band: slivers pointed at the top and the bottom"},
+      {5,
+       "ZIGZAG",
+       0,
+       "Zigzag Band",
+       "One unbroken band around the head with teeth pointing up and down"},
+      {6, "FINE_ZIGZAG", 0, "Fine Zigzag", "A thin band with many small sharp teeth"},
+      {13, "GRASS", 0, "Grass", "Dense long blades standing up from a thin band"},
+      {8, "HORNED_BLOCKS", 0, "Horned Blocks", "Blocks pinched in the middle with a horn at every corner"},
+      {11, "SLANTED_BLOCKS", 0, "Slanted Blocks", "A row of leaning blocks with flat ends"},
+      {12, "WHISKERS", 0, "Band and Whiskers", "A solid band crossed by thin tall strokes"},
+      {9, "THIN_LINE", 0, "Thin Line", "One fine line that swells into a pointed flare here and there"},
+      {10, "DASHES", 0, "Dashes", "A dotted row of small strokes"},
+      {7, "DOTS", 0, "Dots", "Round blobs of different sizes"},
+      {0, "SPIKES", 0, "Spikes", "Separate slivers pointed at the top and the bottom"},
       {1, "TRIANGLES", 0, "Triangles", "Slivers flat on top and pointed at the bottom"},
       {2, "BLOCKS", 0, "Blocks", "Slivers with flat ends, like painted rectangles"},
       {3, "LINES", 0, "Lines", "Thin, long streaks"},
