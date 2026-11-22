@@ -1,0 +1,155 @@
+name: macOS build
+
+on:
+  push:
+    branches: [ci-macos]
+  workflow_dispatch:
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 330
+    steps:
+      - name: Source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          lfs: false
+
+      - name: Tools
+        run: |
+          brew install ninja ccache git-lfs || true
+          git lfs install
+          sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          df -h /
+          xcodebuild -version
+          cmake --version
+
+      - name: Large files of the source (not the tests)
+        run: |
+          # What Blender itself keeps in large file storage comes from Blender's own server,
+          # what Enso added comes from this repository.
+          git config lfs.url https://projects.blender.org/blender/blender.git/info/lfs
+          git lfs pull --exclude="tests/**" || true
+          git config --unset lfs.url
+          git lfs pull --exclude="tests/**"
+
+      - name: Libraries
+        run: |
+          python3 build_files/utils/make_update.py --no-blender
+          du -sh lib/* || true
+          df -h /
+
+      - name: Compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-macos-${{ github.run_id }}
+          restore-keys: ccache-macos-
+
+      - name: Configure
+        run: |
+          mkdir -p ../build
+          cd ../build
+          cmake -G Ninja -C "$GITHUB_WORKSPACE/build_files/cmake/config/blender_release.cmake" \
+            -DCMAKE_BUILD_TYPE=Release -DWITH_COMPILER_CCACHE=ON "$GITHUB_WORKSPACE"
+
+      - name: Build
+        run: |
+          cd ../build
+          ccache -M 4G
+          ninja install 2>&1 | tee "$RUNNER_TEMP/build_log.txt" | grep -E "^\[[0-9]+/[0-9]+\]|error|Error|FAILED|warning: unused" | awk 'NR % 25 == 1 || /error|Error|FAILED/'
+          test "${PIPESTATUS[0]}" -eq 0
+          ccache -s
+
+      - name: Try it
+        if: success()
+        run: |
+          cd ../build/bin
+          ls
+          APP=$(ls -d *.app | head -1)
+          BL="$APP/Contents/MacOS/Blender"
+          cat > "$RUNNER_TEMP/smoke.py" <<'PY'
+          import bpy, math, os, traceback
+          out = os.environ.get("RUNNER_TEMP", "/tmp")
+          print("ENSO VERSION", getattr(bpy.app, "enso_version_string", "?"), bpy.app.version_string)
+          names = sorted(n for n in dir(bpy.types) if n.startswith("ShaderNodeEnso"))
+          print("ENSO SHADER NODES", len(names), names)
+          print("ENSO COMPOSITOR NODES", sorted(n for n in dir(bpy.types) if n.startswith("CompositorNodeEnso")))
+          try:
+              bpy.ops.wm.read_factory_settings(use_empty=True)
+              sc = bpy.context.scene
+              bpy.ops.object.light_add(type='SUN', rotation=(math.radians(50), 0, math.radians(35)))
+              cols = 8
+              made = 0
+              for k, name in enumerate(names):
+                  bpy.ops.mesh.primitive_uv_sphere_add(location=((k % cols) * 2.4, 0, -(k // cols) * 2.4))
+                  ob = bpy.context.object
+                  m = bpy.data.materials.new(name)
+                  m.use_nodes = True
+                  t = m.node_tree
+                  t.nodes.clear()
+                  try:
+                      n = t.nodes.new(name)
+                      e = t.nodes.new("ShaderNodeEmission")
+                      o = t.nodes.new("ShaderNodeOutputMaterial")
+                      src = next((s for s in n.outputs if s.type in {'RGBA', 'VALUE', 'VECTOR'} and s.enabled), None)
+                      if src is not None:
+                          t.links.new(src, e.inputs["Color"])
+                      t.links.new(e.outputs[0], o.inputs["Surface"])
+                      made += 1
+                  except Exception as ex:
+                      print("NODE FAILED", name, ex)
+                  ob.data.materials.append(m)
+              rows = (len(names) + cols - 1) // cols
+              cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
+              cam.data.type = 'ORTHO'
+              cam.data.ortho_scale = cols * 2.6
+              cam.location = ((cols - 1) * 1.2, -20, -(rows - 1) * 1.2)
+              cam.rotation_euler = (math.radians(90), 0, 0)
+              sc.collection.objects.link(cam)
+              sc.camera = cam
+              sc.render.engine = 'BLENDER_EEVEE'
+              sc.eevee.taa_render_samples = 4
+              sc.render.resolution_x = 1280
+              sc.render.resolution_y = max(200, int(1280 * rows / cols))
+              sc.render.filepath = os.path.join(out, "enso_nodes.png")
+              bpy.ops.render.render(write_still=True)
+              print("RENDER OK", made, "materials")
+          except Exception:
+              print("RENDER FAILED")
+              traceback.print_exc()
+          PY
+          "$BL" -b --python "$RUNNER_TEMP/smoke.py" 2>&1 | tee "$RUNNER_TEMP/smoke_log.txt" | tail -60 || true
+
+      - name: Pack
+        if: success()
+        run: |
+          cd ../build/bin
+          APP=$(ls -d *.app | head -1)
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/EnsoEngine-macos-arm64.zip"
+          ls -la "$RUNNER_TEMP"
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          retention-days: 3
+          path: |
+            ${{ runner.temp }}/build_log.txt
+            ${{ runner.temp }}/smoke_log.txt
+            ${{ runner.temp }}/enso_nodes.png
+
+      - name: Keep the build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EnsoEngine-macos-arm64
+          retention-days: 2
+          compression-level: 0
+          path: ${{ runner.temp }}/EnsoEngine-macos-arm64.zip
